@@ -1,0 +1,31 @@
+{
+    "niveaux_completes": [
+        1
+    ],
+    "scores": {
+        "map1": {
+            "mouvements": 6,
+            "temps": 2.54
+        },
+        "Test Editeur": {
+            "mouvements": 6,
+            "temps": 4.93
+        },
+        "map4": {
+            "mouvements": 8,
+            "temps": 4.63
+        },
+        "PremierTest": {
+            "mouvements": 18,
+            "temps": 7.68
+        },
+        "map2": {
+            "mouvements": 13,
+            "temps": 9.66
+        },
+        "map3": {
+            "mouvements": 38,
+            "temps": 15.33
+        }
+    }
+}
