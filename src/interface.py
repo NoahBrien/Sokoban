@@ -3,327 +3,236 @@ import os
 from . import constantes as C
 from . import utilitaires
 from . import classes
-from . import editeur  # editeur sera importé ici
+from . import editeur
 from . import solveurs
-from .ui_elements import Bouton  # Importe Bouton depuis son nouveau fichier
+from .ui_elements import Bouton
 
 
 class InterfaceGraphique:
-    """Gère l'affichage général, les menus, et les interactions de base."""
-
     def __init__(self, largeur, hauteur, jeu_principal):
-        self.largeur = largeur
+        self.largeur = largeur;
         self.hauteur = hauteur
         self.fenetre = pygame.display.set_mode((largeur, hauteur))
         pygame.display.set_caption("Sokoban")
-
         self.images = utilitaires.charger_images_sokoban()
-        if self.images.get('icon'):
-            pygame.display.set_icon(self.images['icon'])
-
+        if self.images.get('icon'): pygame.display.set_icon(self.images['icon'])
         self.font_titre = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_TITRE)
         self.font_menu = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_MENU)
         self.font_jeu = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_JEU)
-
         self.jeu_principal = jeu_principal
-        self.boutons_menu = []
+        self.boutons_menu = [];
         self.boutons_selection_niveau = []
-        self.scroll_offset_selection_niveau = 0
+        self.scroll_offset_selection_niveau = 0;
         self.hauteur_contenu_selection_niveau = 0
-        self.btn_retour_sel_niveau = None  # Pour garder une référence au bouton retour
-
-        self.message_victoire_affiche_temps = 0
+        self.btn_retour_sel_niveau = None
+        self.message_victoire_affiche_temps = 0;
         self.editeur_instance = None
-        self.temp_bouton_retour_scores = None  # Pour le bouton retour des scores
+        self.temp_bouton_retour_scores = None
 
     def _creer_boutons_menu_principal(self):
         self.boutons_menu = []
-        btn_largeur, btn_hauteur = 300, 55
-        espace = 25
-        x_centre = self.largeur // 2 - btn_largeur // 2
-        nb_boutons = 4
-        y_total_boutons = nb_boutons * btn_hauteur + (nb_boutons - 1) * espace
-        y_debut = self.hauteur // 2 - y_total_boutons // 2 + 30
-
-        actions = [
-            ("Nouvelle Partie", C.ETAT_SELECTION_NIVEAU),
-            ("Éditeur de Niveaux", C.ETAT_EDITEUR),
-            ("Scores", C.ETAT_SCORES),
-            ("Quitter", C.ETAT_QUITTER)
-        ]
-        for i, (texte, action_id) in enumerate(actions):
-            btn = Bouton(x_centre, y_debut + i * (btn_hauteur + espace), btn_largeur, btn_hauteur, texte,
-                         font=self.font_menu, action=action_id)
-            self.boutons_menu.append(btn)
+        btn_w, btn_h, espace, nb_btns = 300, 55, 25, 4
+        x_c = self.largeur // 2 - btn_w // 2
+        y_tot_b = nb_btns * btn_h + (nb_btns - 1) * espace
+        y_start = self.hauteur // 2 - y_tot_b // 2 + 30
+        actions = [("Nouvelle Partie", C.ETAT_SELECTION_NIVEAU), ("Éditeur de Niveaux", C.ETAT_EDITEUR),
+                   ("Scores", C.ETAT_SCORES), ("Quitter", C.ETAT_QUITTER)]
+        for i, (txt, act_id) in enumerate(actions):
+            self.boutons_menu.append(
+                Bouton(x_c, y_start + i * (btn_h + espace), btn_w, btn_h, txt, font=self.font_menu, action=act_id))
 
     def afficher_menu_principal(self):
         self.fenetre.fill(C.DARK_BACKGROUND)
-        titre_surface = self.font_titre.render("Sokoban", True, C.DARK_TEXT_PRIMARY)
-        titre_rect = titre_surface.get_rect(center=(self.largeur // 2, self.hauteur // 4))
-        self.fenetre.blit(titre_surface, titre_rect)
-
-        if not self.boutons_menu:
-            self._creer_boutons_menu_principal()
-
-        pos_souris = pygame.mouse.get_pos()
-        for btn in self.boutons_menu:
-            btn.verifier_survol(pos_souris)
-            btn.dessiner(self.fenetre)
+        tit_s = self.font_titre.render("Sokoban", True, C.DARK_TEXT_PRIMARY)
+        tit_r = tit_s.get_rect(center=(self.largeur // 2, self.hauteur // 4))
+        self.fenetre.blit(tit_s, tit_r)
+        if not self.boutons_menu: self._creer_boutons_menu_principal()
+        mouse_pos = pygame.mouse.get_pos()
+        for btn in self.boutons_menu: btn.verifier_survol(mouse_pos); btn.dessiner(self.fenetre)
         pygame.display.flip()
 
-    def gerer_clic_menu_principal(self, pos_souris):
-        for btn in self.boutons_menu:
-            action = btn.verifier_clic(pos_souris)
-            if action:
-                return action
-        return None
+    def gerer_clic_menu_principal(self, p_s):
+        return next((b.verifier_clic(p_s) for b in self.boutons_menu if b.verifier_clic(p_s)), None)
 
-    def _preparer_boutons_selection_niveau(self, niveaux_defaut, niveaux_perso):
+    def _preparer_boutons_selection_niveau(self, chemins_niveaux_defaut,
+                                           chemins_niveaux_perso):  # MODIFIÉ pour accepter chemins
         self.boutons_selection_niveau = []
-        tous_niveaux_specs = []
-        idx_courant = 0
-        for path in niveaux_defaut:
-            nom_affiche = os.path.basename(path).replace(".txt", f" (D{idx_courant})")
-            tous_niveaux_specs.append(
-                {"type_charge": "defaut_chemin", "data": path, "index_global": idx_courant, "nom_affiche": nom_affiche})
-            idx_courant += 1
+        tous_n_s = [];
+        idx_g_c = 0
 
-        offset_index_perso = idx_courant
-        for i, perso_data in enumerate(niveaux_perso):
-            nom_affiche = f"{perso_data['nom']} (P{i})"
-            tous_niveaux_specs.append(
-                {"type_charge": "perso_contenu", "data": perso_data['contenu'], "index_global": offset_index_perso + i,
-                 "nom_affiche": nom_affiche})
+        for i, path in enumerate(chemins_niveaux_defaut):  # Utilise chemins_niveaux_defaut
+            nom_b = os.path.basename(path);
+            nom_a = nom_b.replace(".txt", f" (Défaut {i + 1})")
+            spec = {"type_charge": "fichier_chemin", "data": path, "index_global": idx_g_c,
+                    "nom_affiche": nom_b.replace(".txt", "")}  # type_charge est maintenant fichier_chemin
+            tous_n_s.append({"nom_pour_bouton": nom_a, "action_spec": spec});
+            idx_g_c += 1
 
-        btn_largeur, btn_hauteur = 300, 45
-        espace_v = 15
-        x_pos_col1 = self.largeur // 2 - btn_largeur - 20
-        x_pos_col2 = self.largeur // 2 + 20
-        y_pos_debut = 120  # Position Y de départ pour les boutons dans la surface scrollable
+        for i, path in enumerate(chemins_niveaux_perso):  # Utilise chemins_niveaux_perso
+            nom_b = os.path.basename(path);
+            nom_a = nom_b.replace(".txt", f" (Perso {i + 1})")  # On utilise le nom de fichier
+            spec = {"type_charge": "fichier_chemin", "data": path, "index_global": idx_g_c,
+                    "nom_affiche": nom_b.replace(".txt", "")}  # type_charge est fichier_chemin
+            tous_n_s.append({"nom_pour_bouton": nom_a, "action_spec": spec});
+            idx_g_c += 1
 
+        btn_w, btn_h, esp_v = 300, 45, 15
+        nb_cols = 2 if self.largeur > (btn_w * 2 + 100) else 1
+        x_pos_cols = []
+        if nb_cols == 1:
+            x_pos_cols.append(self.largeur // 2 - btn_w // 2)
+        else:
+            l_tot_b_e = btn_w * 2 + 60; x_dep_tot = self.largeur // 2 - l_tot_b_e // 2; x_pos_cols.extend(
+                [x_dep_tot + 20, x_dep_tot + btn_w + 40])
+        y_p_d_rel = 0;
         self.hauteur_contenu_selection_niveau = 0
-
-        for i, spec in enumerate(tous_niveaux_specs):
-            col_idx = i % 2
-            row_idx = i // 2
-            current_x = x_pos_col1 if col_idx == 0 else x_pos_col2
-            current_y = y_pos_debut + row_idx * (btn_hauteur + espace_v)  # Y relatif au début de la zone scrollable
-
-            action = {"type_charge": spec["type_charge"], "data": spec["data"], "index_global": spec["index_global"],
-                      "nom_affiche": spec["nom_affiche"].split(" (")[0]}
-            # Les positions des boutons sont relatives au début de la zone scrollable (y_pos_debut)
-            # mais Bouton a besoin de coordonnées absolues par rapport à sa surface de dessin.
-            # Ici, on stocke les boutons avec des y qui seront ajustés par le scroll lors du dessin.
-            # Pour la création du Bouton, on peut utiliser les y relatifs à la *surface scrollable*.
-            # Donc, on soustrait y_pos_debut pour que le premier bouton soit à y=0 sur la surface scrollable.
-            btn = Bouton(current_x, current_y - y_pos_debut, btn_largeur, btn_hauteur, spec["nom_affiche"],
-                         font=self.font_menu, action=action)
-            self.boutons_selection_niveau.append(btn)
-            if (current_y - y_pos_debut) + btn_hauteur > self.hauteur_contenu_selection_niveau:
-                self.hauteur_contenu_selection_niveau = (current_y - y_pos_debut) + btn_hauteur
-
+        for i, niv_spec_b in enumerate(tous_n_s):
+            col_i = i % nb_cols;
+            row_i = i // nb_cols
+            curr_x = x_pos_cols[col_i];
+            curr_y_rel = y_p_d_rel + row_i * (btn_h + esp_v)
+            nom_b_txt = niv_spec_b["nom_pour_bouton"];
+            act_p_b = niv_spec_b["action_spec"]
+            self.boutons_selection_niveau.append(
+                Bouton(curr_x, curr_y_rel, btn_w, btn_h, nom_b_txt, font=self.font_menu, action=act_p_b))
+            if curr_y_rel + btn_h > self.hauteur_contenu_selection_niveau: self.hauteur_contenu_selection_niveau = curr_y_rel + btn_h
+        if self.boutons_selection_niveau: self.hauteur_contenu_selection_niveau += esp_v
         self.btn_retour_sel_niveau = Bouton(self.largeur // 2 - 100, self.hauteur - 70, 200, 50, "Retour Menu",
                                             font=self.font_menu, action="retour_menu")
 
-    def afficher_selection_niveau(self, niveaux_defaut, niveaux_perso):
+    def afficher_selection_niveau(self, chemins_niveaux_defaut, chemins_niveaux_perso):  # MODIFIÉ
         self.fenetre.fill(C.DARK_BACKGROUND)
-        titre_surface = self.font_titre.render("Sélectionnez un Niveau", True, C.DARK_TEXT_PRIMARY)
-        titre_rect = titre_surface.get_rect(center=(self.largeur // 2, 60))
-        self.fenetre.blit(titre_surface, titre_rect)
-
-        if not self.boutons_selection_niveau or not self.btn_retour_sel_niveau:  # Si les boutons ne sont pas préparés
-            self._preparer_boutons_selection_niveau(niveaux_defaut, niveaux_perso)
-
-        # Zone scrollable
-        y_zone_scroll_debut = 120
-        hauteur_visible_zone_scroll = self.hauteur - y_zone_scroll_debut - 80
-
-        surface_scrollable = pygame.Surface((self.largeur, self.hauteur_contenu_selection_niveau))
-        surface_scrollable.fill(C.DARK_BACKGROUND)
-
-        pos_souris_absolue = pygame.mouse.get_pos()
-
-        for btn in self.boutons_selection_niveau:  # Ces boutons ont des positions relatives à la surface_scrollable
-            # Pour la vérification du survol, on doit considérer la position du bouton sur l'écran
-            # après scrolling.
-            rect_sur_ecran = pygame.Rect(btn.rect.x,
-                                         btn.rect.y - self.scroll_offset_selection_niveau + y_zone_scroll_debut,
-                                         btn.rect.width, btn.rect.height)
-            if rect_sur_ecran.collidepoint(pos_souris_absolue):
-                btn.survol = True
-            else:
-                btn.survol = False
-            btn.dessiner(surface_scrollable)
-
-        self.fenetre.blit(surface_scrollable, (0, y_zone_scroll_debut),
-                          (0, self.scroll_offset_selection_niveau, self.largeur, hauteur_visible_zone_scroll))
-
-        if self.btn_retour_sel_niveau:
-            self.btn_retour_sel_niveau.verifier_survol(pos_souris_absolue)
-            self.btn_retour_sel_niveau.dessiner(self.fenetre)
-
+        tit_s = self.font_titre.render("Sélectionnez un Niveau", True, C.DARK_TEXT_PRIMARY)
+        tit_r = tit_s.get_rect(center=(self.largeur // 2, 60));
+        self.fenetre.blit(tit_s, tit_r)
+        if not self.boutons_selection_niveau or not self.btn_retour_sel_niveau: self._preparer_boutons_selection_niveau(
+            chemins_niveaux_defaut, chemins_niveaux_perso)  # MODIFIÉ
+        y_z_s_d = 120;
+        h_v_z_s = self.hauteur - y_z_s_d - 80
+        surf_scroll = pygame.Surface((self.largeur, self.hauteur_contenu_selection_niveau));
+        surf_scroll.fill(C.DARK_BACKGROUND)
+        mouse_pos_abs = pygame.mouse.get_pos()
+        for btn in self.boutons_selection_niveau:
+            rect_ecran = pygame.Rect(btn.rect.x, btn.rect.y - self.scroll_offset_selection_niveau + y_z_s_d,
+                                     btn.rect.width, btn.rect.height)
+            btn.survol = rect_ecran.collidepoint(mouse_pos_abs)
+            btn.dessiner(surf_scroll)
+        self.fenetre.blit(surf_scroll, (0, y_z_s_d), (0, self.scroll_offset_selection_niveau, self.largeur, h_v_z_s))
+        if self.btn_retour_sel_niveau: self.btn_retour_sel_niveau.verifier_survol(
+            mouse_pos_abs); self.btn_retour_sel_niveau.dessiner(self.fenetre)
         pygame.display.flip()
 
-    def gerer_clic_selection_niveau(self, pos_souris_absolue, event_button):
-        y_zone_scroll_debut = 120
-        hauteur_visible_zone_scroll = self.hauteur - y_zone_scroll_debut - 80
-
-        if event_button == 4:
-            self.scroll_offset_selection_niveau = max(0, self.scroll_offset_selection_niveau - 30)
-            return None
-        elif event_button == 5:
-            max_scroll = max(0, self.hauteur_contenu_selection_niveau - hauteur_visible_zone_scroll)
-            self.scroll_offset_selection_niveau = min(max_scroll, self.scroll_offset_selection_niveau + 30)
-            return None
-
-        if event_button == 1:
-            if self.btn_retour_sel_niveau and self.btn_retour_sel_niveau.verifier_clic(pos_souris_absolue):
-                self.boutons_selection_niveau = []
-                self.scroll_offset_selection_niveau = 0
-                self.btn_retour_sel_niveau = None
+    def gerer_clic_selection_niveau(self, p_s_a, ev_b):
+        y_z_s_d = 120;
+        h_v_z_s = self.hauteur - y_z_s_d - 80
+        if ev_b == 4:
+            self.scroll_offset_selection_niveau = max(0, self.scroll_offset_selection_niveau - 30); return None
+        elif ev_b == 5:
+            max_s = max(0, self.hauteur_contenu_selection_niveau - h_v_z_s); self.scroll_offset_selection_niveau = min(
+                max_s, self.scroll_offset_selection_niveau + 30); return None
+        if ev_b == 1:
+            if self.btn_retour_sel_niveau and self.btn_retour_sel_niveau.verifier_clic(p_s_a):
+                self.boutons_selection_niveau = [];
+                self.scroll_offset_selection_niveau = 0;
+                self.btn_retour_sel_niveau = None;
                 return C.ETAT_MENU_PRINCIPAL
-
-            # Vérifier les clics sur les boutons dans la zone scrollable
-            # Transformer la position de la souris en coordonnées relatives à la surface scrollable *entière*
-            souris_x_rel_surface_scroll = pos_souris_absolue[0]
-            souris_y_rel_surface_scroll = pos_souris_absolue[
-                                              1] - y_zone_scroll_debut + self.scroll_offset_selection_niveau
-
+            s_x_rel = p_s_a[0];
+            s_y_rel = p_s_a[1] - y_z_s_d + self.scroll_offset_selection_niveau
             for btn in self.boutons_selection_niveau:
-                if btn.rect.collidepoint((souris_x_rel_surface_scroll, souris_y_rel_surface_scroll)):
-                    action = btn.action  # L'action est déjà vérifiée par collidepoint dans Bouton
+                if btn.rect.collidepoint((s_x_rel, s_y_rel)):
+                    action = btn.action
                     if isinstance(action, dict):
                         self.jeu_principal.charger_niveau_par_specification(action)
-                        self.boutons_selection_niveau = []
-                        self.scroll_offset_selection_niveau = 0
-                        self.btn_retour_sel_niveau = None
+                        self.boutons_selection_niveau = [];
+                        self.scroll_offset_selection_niveau = 0;
+                        self.btn_retour_sel_niveau = None;
                         return C.ETAT_JEU
         return None
 
-    def afficher_ecran_jeu(self, niveau_actuel, nb_mouvements, temps_ecoule_secondes):
-        if not niveau_actuel: return
-
-        niveau_largeur_px = niveau_actuel.largeur * C.TAILLE_CASE
-        niveau_hauteur_px = niveau_actuel.hauteur * C.TAILLE_CASE
-
-        surface_jeu = pygame.Surface((niveau_largeur_px, niveau_hauteur_px))
-        niveau_actuel.dessiner(surface_jeu, self.images)
-
-        offset_x_global = (self.largeur - niveau_largeur_px) // 2
-        offset_y_global = (self.hauteur - niveau_hauteur_px - 60) // 2
-        if offset_x_global < 0: offset_x_global = 0
-        if offset_y_global < 0: offset_y_global = 0
-
-        self.fenetre.fill(C.NOIR)
-        self.fenetre.blit(surface_jeu, (offset_x_global, offset_y_global))
-
-        hud_y_pos = 15
-        hud_texte_mvt = self.font_jeu.render(f"Mouvements: {nb_mouvements}", True, C.DARK_TEXT_PRIMARY)
-        self.fenetre.blit(hud_texte_mvt, (20, hud_y_pos))
-
-        minutes = int(temps_ecoule_secondes // 60)
-        secondes = int(temps_ecoule_secondes % 60)
-        hud_texte_temps = self.font_jeu.render(f"Temps: {minutes:02d}:{secondes:02d}", True, C.DARK_TEXT_PRIMARY)
-        self.fenetre.blit(hud_texte_temps, (self.largeur - hud_texte_temps.get_width() - 20, hud_y_pos))
-
-        instr_text = "R: Recommencer | U: Annuler | ESC: Menu | F1: Résoudre"
+    def afficher_ecran_jeu(self, niv_act, nb_mvt, tps_ec_s):
+        if not niv_act: return
+        niv_l_px, niv_h_px = niv_act.largeur * C.TAILLE_CASE, niv_act.hauteur * C.TAILLE_CASE
+        surf_jeu = pygame.Surface((niv_l_px, niv_h_px));
+        niv_act.dessiner(surf_jeu, self.images)
+        off_x_g = (self.largeur - niv_l_px) // 2;
+        off_y_g = (self.hauteur - niv_h_px - 60) // 2
+        if off_x_g < 0: off_x_g = 0;
+        if off_y_g < 0: off_y_g = 0
+        self.fenetre.fill(C.NOIR);
+        self.fenetre.blit(surf_jeu, (off_x_g, off_y_g))
+        hud_y = 15;
+        hud_mvt_s = self.font_jeu.render(f"Mouvements: {nb_mvt}", True, C.DARK_TEXT_PRIMARY);
+        self.fenetre.blit(hud_mvt_s, (20, hud_y))
+        mins, secs = int(tps_ec_s // 60), int(tps_ec_s % 60)
+        hud_tps_s = self.font_jeu.render(f"Temps: {mins:02d}:{secs:02d}", True, C.DARK_TEXT_PRIMARY);
+        self.fenetre.blit(hud_tps_s, (self.largeur - hud_tps_s.get_width() - 20, hud_y))
+        instr_text = "R:Recommencer|U:Annuler|ESC:Menu|F1:BFS|F2:Backtrack"
         instr_surface = self.font_jeu.render(instr_text, True, C.JAUNE)
         self.fenetre.blit(instr_surface, (20, self.hauteur - instr_surface.get_height() - 15))
-
-        if self.jeu_principal.victoire_detectee and self.message_victoire_affiche_temps == 0:
-            self.message_victoire_affiche_temps = pygame.time.get_ticks()
-
+        if self.jeu_principal.victoire_detectee and self.message_victoire_affiche_temps == 0: self.message_victoire_affiche_temps = pygame.time.get_ticks()
         if self.message_victoire_affiche_temps > 0:
             self.afficher_message_victoire()
-            if pygame.time.get_ticks() - self.message_victoire_affiche_temps > 2500:
-                self.message_victoire_affiche_temps = 0
-                self.jeu_principal.passer_au_niveau_suivant_ou_menu()
-
+            if pygame.time.get_ticks() - self.message_victoire_affiche_temps > 2500: self.message_victoire_affiche_temps = 0; self.jeu_principal.passer_au_niveau_suivant_ou_menu()
         pygame.display.flip()
 
     def afficher_message_victoire(self):
-        texte_victoire = self.font_titre.render("NIVEAU TERMINÉ !", True, C.DARK_ACCENT_GOOD)
-        rect_victoire = texte_victoire.get_rect(center=(self.largeur // 2, self.hauteur // 2))
-
-        s = pygame.Surface((rect_victoire.width + 40, rect_victoire.height + 30), pygame.SRCALPHA)
+        txt_vic = self.font_titre.render("NIVEAU TERMINÉ !", True, C.DARK_ACCENT_GOOD)
+        r_vic = txt_vic.get_rect(center=(self.largeur // 2, self.hauteur // 2))
+        s = pygame.Surface((r_vic.width + 40, r_vic.height + 30), pygame.SRCALPHA);
         s.fill((C.DARK_SURFACE[0], C.DARK_SURFACE[1], C.DARK_SURFACE[2], 220))
-        pygame.draw.rect(s, C.DARK_ACCENT_GOOD, s.get_rect(), 2, border_radius=5)
-        self.fenetre.blit(s, (rect_victoire.left - 20, rect_victoire.top - 15))
-
-        self.fenetre.blit(texte_victoire, rect_victoire)
+        pygame.draw.rect(s, C.DARK_ACCENT_GOOD, s.get_rect(), 2, border_radius=5);
+        self.fenetre.blit(s, (r_vic.left - 20, r_vic.top - 15))
+        self.fenetre.blit(txt_vic, r_vic)
 
     def afficher_editeur(self):
-        if self.editeur_instance is None:
-            self.editeur_instance = editeur.EditeurNiveaux(15, 10, jeu_principal_ref=self.jeu_principal)
-
-        self.editeur_instance.dessiner(self.fenetre, self.images, self.font_menu)
+        if self.editeur_instance is None: self.editeur_instance = editeur.EditeurNiveaux(15, 10,
+                                                                                         jeu_principal_ref=self.jeu_principal)
+        self.editeur_instance.dessiner(self.fenetre, self.images, self.font_menu);
         pygame.display.flip()
 
     def gerer_evenement_editeur(self, event):
-        if self.editeur_instance:
-            self.editeur_instance.gerer_evenement(event)
+        if self.editeur_instance: self.editeur_instance.gerer_evenement(event)
 
     def afficher_scores(self, scores_data):
         self.fenetre.fill(C.DARK_BACKGROUND)
-        titre_surface = self.font_titre.render("Meilleurs Scores", True, C.DARK_TEXT_PRIMARY)
-        titre_rect = titre_surface.get_rect(center=(self.largeur // 2, 60))
-        self.fenetre.blit(titre_surface, titre_rect)
-
-        y_offset = 130
-        x_offset = 70
-        for nom_niveau, score_info in scores_data.items():
-            mvt = score_info.get('mouvements', 'N/A')
-            temps_s = score_info.get('temps', 'N/A')
-            temps_str = f"{int(temps_s // 60):02d}:{int(temps_s % 60):02d}" if isinstance(temps_s,
-                                                                                          (int, float)) else 'N/A'
-
-            score_text = f"Niv. {nom_niveau}: {mvt} mvts, {temps_str}"
-            score_surface = self.font_menu.render(score_text, True, C.DARK_TEXT_SECONDARY)
-            self.fenetre.blit(score_surface, (x_offset, y_offset))
-            y_offset += 45
-            if y_offset > self.hauteur - 100:
-                texte_plus = self.font_menu.render("...", True, C.DARK_TEXT_SECONDARY)
-                self.fenetre.blit(texte_plus, (x_offset, y_offset))
-                break
-
+        tit_s = self.font_titre.render("Meilleurs Scores", True, C.DARK_TEXT_PRIMARY);
+        tit_r = tit_s.get_rect(center=(self.largeur // 2, 60));
+        self.fenetre.blit(tit_s, tit_r)
+        y_off, x_off = 130, 70
+        for nom_niv, scr_info in scores_data.items():
+            mvt, tps_s = scr_info.get('mouvements', 'N/A'), scr_info.get('temps', 'N/A')
+            tps_str = f"{int(tps_s // 60):02d}:{int(tps_s % 60):02d}" if isinstance(tps_s, (int, float)) else 'N/A'
+            scr_txt = f"Niv. {nom_niv}: {mvt} mvts, {tps_str}"
+            scr_s = self.font_menu.render(scr_txt, True, C.DARK_TEXT_SECONDARY);
+            self.fenetre.blit(scr_s, (x_off, y_off));
+            y_off += 45
+            if y_off > self.hauteur - 100: txt_plus = self.font_menu.render("...", True,
+                                                                            C.DARK_TEXT_SECONDARY); self.fenetre.blit(
+                txt_plus, (x_off, y_off)); break
         self.temp_bouton_retour_scores = Bouton(self.largeur // 2 - 100, self.hauteur - 70, 200, 50, "Retour Menu",
                                                 font=self.font_menu, action=C.ETAT_MENU_PRINCIPAL)
-
-        pos_souris = pygame.mouse.get_pos()
-        self.temp_bouton_retour_scores.verifier_survol(pos_souris)
+        mouse_pos = pygame.mouse.get_pos();
+        self.temp_bouton_retour_scores.verifier_survol(mouse_pos);
         self.temp_bouton_retour_scores.dessiner(self.fenetre)
-
         pygame.display.flip()
 
-    def gerer_clic_scores(self, pos_souris):
-        if self.temp_bouton_retour_scores:
-            return self.temp_bouton_retour_scores.verifier_clic(pos_souris)
-        return None
+    def gerer_clic_scores(self, p_s):
+        return self.temp_bouton_retour_scores.verifier_clic(p_s) if self.temp_bouton_retour_scores else None
 
-    def afficher_visualisation_solveur(self, niveau_visu, solution_pas_a_pas, index_pas_actuel, message=""):
-        if not niveau_visu: return
-
+    def afficher_visualisation_solveur(self, niv_visu, sol_pas, idx_pas_act, msg=""):
+        if not niv_visu: return
         self.fenetre.fill(C.DARK_SURFACE)
-
-        niveau_largeur_px = niveau_visu.largeur * C.TAILLE_CASE
-        niveau_hauteur_px = niveau_visu.hauteur * C.TAILLE_CASE
-        surface_jeu_visu = pygame.Surface((niveau_largeur_px, niveau_hauteur_px))
-        niveau_visu.dessiner(surface_jeu_visu, self.images)
-
-        offset_x_global = (self.largeur - niveau_largeur_px) // 2
-        offset_y_global = (self.hauteur - niveau_hauteur_px - 90) // 2
-        self.fenetre.blit(surface_jeu_visu, (offset_x_global, offset_y_global))
-
-        total_pas = len(solution_pas_a_pas) if solution_pas_a_pas else 0
-        info_pas = f"Pas: {index_pas_actuel + 1} / {total_pas}"
-        info_surface = self.font_jeu.render(info_pas, True, C.DARK_TEXT_PRIMARY)
-        self.fenetre.blit(info_surface, (30, 25))
-
-        message_surface = self.font_jeu.render(message, True, C.DARK_ACCENT_INFO)
-        self.fenetre.blit(message_surface, (30, 55))
-
-        instr_surface = self.font_jeu.render("ESPACE: Suivant | ENTRÉE: Terminer | ESC: Annuler", True,
-                                             C.DARK_ACCENT_WARN)
-        self.fenetre.blit(instr_surface, (30, self.hauteur - instr_surface.get_height() - 20))
-
+        niv_l_px, niv_h_px = niv_visu.largeur * C.TAILLE_CASE, niv_visu.hauteur * C.TAILLE_CASE
+        surf_jeu_visu = pygame.Surface((niv_l_px, niv_h_px));
+        niv_visu.dessiner(surf_jeu_visu, self.images)
+        off_x_g = (self.largeur - niv_l_px) // 2;
+        off_y_g = (self.hauteur - niv_h_px - 90) // 2;
+        self.fenetre.blit(surf_jeu_visu, (off_x_g, off_y_g))
+        tot_pas = len(sol_pas) if sol_pas else 0
+        info_pas_s = self.font_jeu.render(f"Pas: {idx_pas_act + 1} / {tot_pas}", True, C.DARK_TEXT_PRIMARY);
+        self.fenetre.blit(info_pas_s, (30, 25))
+        msg_s = self.font_jeu.render(msg, True, C.DARK_ACCENT_INFO);
+        self.fenetre.blit(msg_s, (30, 55))
+        instr_s = self.font_jeu.render("ESPACE: Suivant | ENTRÉE: Terminer | ESC: Annuler", True, C.DARK_ACCENT_WARN);
+        self.fenetre.blit(instr_s, (30, self.hauteur - instr_s.get_height() - 20))
         pygame.display.flip()
