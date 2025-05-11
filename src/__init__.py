@@ -1,0 +1,1 @@
+# Ce fichier vide permet au dossier src d'être traité comme un package Python.
