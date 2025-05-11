@@ -1,10 +1,10 @@
+# sokoban/src/interface.py
 import pygame
 import os
 from . import constantes as C
 from . import utilitaires
 from . import editeur
-from . import solveurs  # Non utilisé directement ici, mais bon à garder si des infos solveur passent
-from .ui_elements import Bouton, Slider  # Ajout de Slider
+from .ui_elements import Bouton, Slider
 
 
 class InterfaceGraphique:
@@ -12,44 +12,52 @@ class InterfaceGraphique:
         self.largeur = largeur;
         self.hauteur = hauteur
         self.fenetre = pygame.display.set_mode((largeur, hauteur))
-        pygame.display.set_caption("Sokoban Deluxe")  # Titre mis à jour
-        self.images = utilitaires.charger_images_sokoban()
-        if self.images.get(C.IMG_ICONE): pygame.display.set_icon(self.images[C.IMG_ICONE])
-
+        pygame.display.set_caption("Sokoban Deluxe")
+        self.images_base = utilitaires.charger_images_sokoban()
+        self.images_zoomees = {}
+        if self.images_base.get(C.IMG_ICONE): pygame.display.set_icon(self.images_base[C.IMG_ICONE])
         pygame.font.init()
         self.font_titre = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_TITRE)
         self.font_menu = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_MENU)
         self.font_jeu = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_JEU)
         self.font_options_label = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_OPTIONS_LABEL)
         self.font_slider_valeur = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_SLIDER_VALEUR)
-
         self.jeu_principal = jeu_principal
-
         self.boutons_menu = [];
         self.boutons_selection_niveau = []
         self.scroll_offset_selection_niveau = 0;
         self.hauteur_contenu_selection_niveau = 0
-        self.btn_retour_sel_niveau = None  # Pour la sélection de niveau
-
+        self.btn_retour_sel_niveau = None
         self.message_victoire_affiche_temps = 0;
         self.editeur_instance = None
-
-        # Éléments pour l'écran des Options
-        self.elements_options = {  # Dictionnaire pour stocker boutons et sliders des options
-            "boutons": [],
-            "sliders": {}  # Keyed by action string, e.g., "volume_slider"
-        }
-        self.bouton_retour_options_scores = None  # Bouton commun pour quitter Scores/Options
-
+        self.elements_options = {"boutons": [], "sliders": {}}
+        self.bouton_retour_options_scores = None
         self.scroll_offset_scores = 0;
         self.hauteur_contenu_scores = 0
         self.scrollbar_scores_rect = None;
         self.scrollbar_scores_poignee_rect = None
         self.dragging_scrollbar_scores = False
+        self._regenerer_images_zoomees(
+            self.jeu_principal.taille_case_effective if self.jeu_principal else C.TAILLE_CASE)
+
+    def _regenerer_images_zoomees(self, taille_case_cible):
+        self.images_zoomees.clear()
+        if taille_case_cible <= 0: taille_case_cible = 1
+        for key, img_base in self.images_base.items():
+            if key == C.IMG_ICONE:
+                self.images_zoomees[key] = img_base
+            elif img_base:
+                try:
+                    self.images_zoomees[key] = pygame.transform.scale(img_base, (taille_case_cible, taille_case_cible))
+                except pygame.error as e:
+                    self.images_zoomees[key] = pygame.Surface((taille_case_cible, taille_case_cible), pygame.SRCALPHA)
+                    self.images_zoomees[key].fill((0, 0, 0, 0))
+            else:
+                self.images_zoomees[key] = None
 
     def _creer_boutons_menu_principal(self):
         self.boutons_menu = []
-        btn_w, btn_h, espace, nb_btns = 300, 55, 20, 5  # Espace réduit, 5 boutons
+        btn_w, btn_h, espace, nb_btns = 300, 55, 20, 5
         x_c = self.largeur // 2 - btn_w // 2
         y_tot_b = nb_btns * btn_h + (nb_btns - 1) * espace
         y_start = self.hauteur // 2 - y_tot_b // 2 + 20
@@ -165,28 +173,42 @@ class InterfaceGraphique:
                             return C.ETAT_JEU
         return None
 
-    def afficher_ecran_jeu(self, niv_act, nom_niv_affiche, nb_mvt, tps_ec_s, textures_active, hint_pos=None,
-                           hint_msg="", deadlock_msg=""):  # Ajout textures_active
+    def afficher_ecran_jeu(self, niv_act, nom_niv_affiche, nb_mvt, tps_ec_s, textures_active, taille_case_effective,
+                           view_offset_x, view_offset_y, hint_pos=None, hint_msg="", deadlock_msg=""):
         if not niv_act: return
-        niv_l_px, niv_h_px = niv_act.largeur * C.TAILLE_CASE, niv_act.hauteur * C.TAILLE_CASE
-        min_marge_x, min_marge_y, hud_bas_h = 50, 50, 50
-        zone_jeu_dispo_l = self.largeur - 2 * min_marge_x;
-        zone_jeu_dispo_h = self.hauteur - min_marge_y - hud_bas_h
-        off_x_g = min_marge_x + max(0, (zone_jeu_dispo_l - niv_l_px) // 2);
-        off_y_g = min_marge_y + max(0, (zone_jeu_dispo_h - niv_h_px) // 2)
+        if not self.images_zoomees or (
+                C.IMG_SOL in self.images_zoomees and self.images_zoomees[C.IMG_SOL] is not None and self.images_zoomees[
+            C.IMG_SOL].get_width() != taille_case_effective):
+            self._regenerer_images_zoomees(taille_case_effective)
 
-        surf_jeu = pygame.Surface((niv_l_px, niv_h_px));
-        surf_jeu.fill(C.DARK_BACKGROUND)  # Remplir la surface de jeu
-        niv_act.dessiner(surf_jeu, self.images, textures_active)  # Passer textures_active
+        niv_l_px_total = niv_act.largeur * taille_case_effective
+        niv_h_px_total = niv_act.hauteur * taille_case_effective
+
+        min_marge_x, min_marge_y, hud_bas_h = 50, 50, 50
+        zone_dessin_l = self.largeur - 2 * min_marge_x
+        zone_dessin_h = self.hauteur - min_marge_y - hud_bas_h
+
+        offset_dessin_global_x = min_marge_x + max(0, (zone_dessin_l - niv_l_px_total) // 2)
+        offset_dessin_global_y = min_marge_y + max(0, (zone_dessin_h - niv_h_px_total) // 2)
+
+        surf_jeu = pygame.Surface((niv_l_px_total, niv_h_px_total));
+        surf_jeu.fill(C.DARK_BACKGROUND)
+        niv_act.dessiner(surf_jeu, self.images_zoomees, textures_active, taille_case_effective, -view_offset_x,
+                         -view_offset_y)
 
         if hint_pos:
-            h_x, h_y = hint_pos;
-            rect_hint = pygame.Rect(h_x * C.TAILLE_CASE + 3, h_y * C.TAILLE_CASE + 3, C.TAILLE_CASE - 6,
-                                    C.TAILLE_CASE - 6)
-            pygame.draw.rect(surf_jeu, C.DARK_HINT_COLOR, rect_hint, 3, border_radius=5)
+            h_x, h_y = hint_pos
+            rect_hint_x = h_x * taille_case_effective + 3 - view_offset_x
+            rect_hint_y = h_y * taille_case_effective + 3 - view_offset_y
+            rect_hint_w = taille_case_effective - 6;
+            rect_hint_h = taille_case_effective - 6
+            pygame.draw.rect(surf_jeu, C.DARK_HINT_COLOR, (rect_hint_x, rect_hint_y, rect_hint_w, rect_hint_h), 3,
+                             border_radius=5)
 
         self.fenetre.fill(C.DARK_BACKGROUND);
-        self.fenetre.blit(surf_jeu, (off_x_g, off_y_g))
+        self.fenetre.blit(surf_jeu, (offset_dessin_global_x, offset_dessin_global_y),
+                          (0, 0, min(niv_l_px_total, zone_dessin_l), min(niv_h_px_total, zone_dessin_h)))
+
         y_hud1, y_hud2 = 15, 40
         nom_surf = self.font_jeu.render(f"Niveau: {nom_niv_affiche}", True, C.DARK_TEXT_PRIMARY);
         self.fenetre.blit(nom_surf, (20, y_hud1))
@@ -205,7 +227,8 @@ class InterfaceGraphique:
             msg_surf = self.font_jeu.render(deadlock_msg, True, C.DARK_DEADLOCK_WARN_COLOR); self.fenetre.blit(msg_surf,
                                                                                                                (20,
                                                                                                                 y_hud2))
-        instr_s = self.font_jeu.render("R:Recomm|U:Annul|ESC:Menu|F1:BFS|F2:Bktrk|H:Indice", True, C.DARK_ACCENT_WARN)
+        instr_s = self.font_jeu.render("R:Recomm|U:Annul|ESC:Menu|F1:BFS|F2:Bktrk|H:Indice|Molette:Zoom", True,
+                                       C.DARK_ACCENT_WARN)
         self.fenetre.blit(instr_s, (20, self.hauteur - instr_s.get_height() - 15))
         if self.jeu_principal.victoire_detectee and self.message_victoire_affiche_temps == 0: self.message_victoire_affiche_temps = pygame.time.get_ticks()
         if self.message_victoire_affiche_temps > 0:
@@ -217,14 +240,14 @@ class InterfaceGraphique:
         txt_vic = self.font_titre.render("NIVEAU TERMINÉ !", True, C.DARK_ACCENT_GOOD)
         r_vic = txt_vic.get_rect(centerx=self.largeur // 2, y=self.hauteur // 2 - 80)
         mvt, tps_s = self.jeu_principal.nb_mouvements, self.jeu_principal.temps_ecoule_total_secondes
-        min, sec = int(tps_s // 60), int(tps_s % 60)
+        min_val, sec_val = int(tps_s // 60), int(tps_s % 60)
         txt_mvt_s = self.font_jeu.render(f"Mouvements: {mvt}", True, C.DARK_TEXT_PRIMARY)
         r_mvt_s = txt_mvt_s.get_rect(centerx=self.largeur // 2, y=r_vic.bottom + 20)
-        txt_tps_s = self.font_jeu.render(f"Temps: {min:02d}:{sec:02d}", True, C.DARK_TEXT_PRIMARY)
+        txt_tps_s = self.font_jeu.render(f"Temps: {min_val:02d}:{sec_val:02d}", True, C.DARK_TEXT_PRIMARY)
         r_tps_s = txt_tps_s.get_rect(centerx=self.largeur // 2, y=r_mvt_s.bottom + 10)
         h_tot_txt = r_vic.h + r_mvt_s.h + r_tps_s.h + 60;
         l_max_txt = max(r_vic.w, r_mvt_s.w, r_tps_s.w)
-        l_fond, h_fond = l_max_txt + 80, h_tot_txt + 60
+        l_fond, h_fond = l_max_txt + 80, h_tot_txt + 60;
         r_fond = pygame.Rect(0, 0, l_fond, h_fond);
         r_fond.center = (self.largeur // 2, self.hauteur // 2)
         s = pygame.Surface((l_fond, h_fond), pygame.SRCALPHA);
@@ -236,15 +259,30 @@ class InterfaceGraphique:
         self.fenetre.blit(txt_tps_s, (
         r_fond.centerx - txt_tps_s.get_width() // 2, r_fond.top + 30 + r_vic.h + 20 + r_mvt_s.h + 10))
 
-    def afficher_editeur(self):  # Doit passer textures_active
+    def afficher_editeur(self, taille_case_effective, view_offset_x=0, view_offset_y=0):
         if self.editeur_instance is None:
-            self.editeur_instance = editeur.EditeurNiveaux(15, 10, jeu_principal_ref=self.jeu_principal)
-        textures_act = self.jeu_principal.textures_active if self.jeu_principal else True
-        self.editeur_instance.dessiner(self.fenetre, self.images, self.font_menu, textures_act)
+            if self.jeu_principal and hasattr(self.jeu_principal, 'textures_active'):
+                self.editeur_instance = editeur.EditeurNiveaux(15, 10, jeu_principal_ref=self.jeu_principal)
+            else:
+                self.fenetre.fill(C.DARK_BACKGROUND);
+                font = pygame.font.Font(C.POLICE_DEFAUT, C.TAILLE_POLICE_TITRE)
+                txt = font.render("Erreur init Editeur", True, C.ROUGE);
+                rect = txt.get_rect(center=(self.largeur / 2, self.hauteur / 2))
+                self.fenetre.blit(txt, rect);
+                pygame.display.flip();
+                return
+        textures_act = self.jeu_principal.textures_active
+        if not self.images_zoomees or (
+                C.IMG_SOL in self.images_zoomees and self.images_zoomees[C.IMG_SOL] is not None and self.images_zoomees[
+            C.IMG_SOL].get_width() != taille_case_effective):
+            self._regenerer_images_zoomees(taille_case_effective)
+        self.editeur_instance.dessiner(self.fenetre, self.images_zoomees, self.font_menu, textures_act,
+                                       taille_case_effective, view_offset_x, view_offset_y)
         pygame.display.flip()
 
     def gerer_evenement_editeur(self, event):
-        if self.editeur_instance: self.editeur_instance.gerer_evenement(event)
+        if self.editeur_instance:
+            self.editeur_instance.gerer_evenement(event, self.jeu_principal.taille_case_effective)
 
     def afficher_scores(self, scores_data):
         self.fenetre.fill(C.DARK_BACKGROUND)
@@ -278,60 +316,56 @@ class InterfaceGraphique:
             py = zone_y_debut + ratio_sc * (zone_h_vis - h_poignee)
             self.scrollbar_scores_poignee_rect = pygame.Rect(sb_x, py, 15, h_poignee)
             pygame.draw.rect(self.fenetre, C.DARK_BUTTON_HOVER_BG, self.scrollbar_scores_poignee_rect, border_radius=3)
-
-        # Bouton Retour commun
-        if not self.bouton_retour_options_scores:
-            self.bouton_retour_options_scores = Bouton(self.largeur // 2 - 100, self.hauteur - 60, 200, 50,
+        if not self.bouton_retour_options_scores or self.bouton_retour_options_scores.action != C.ETAT_MENU_PRINCIPAL:
+            self.bouton_retour_options_scores = Bouton(self.largeur // 2 - 100, self.hauteur - 70, 200, 50,
                                                        "Retour Menu", font=self.font_menu, action=C.ETAT_MENU_PRINCIPAL)
         self.bouton_retour_options_scores.verifier_survol(pygame.mouse.get_pos());
         self.bouton_retour_options_scores.dessiner(self.fenetre)
         pygame.display.flip()
 
-    def gerer_evenements_scores(self, event):  # Gère les events spécifiques aux Scores
+    def gerer_evenements_scores(self, event):
         mouse_pos = event.pos if hasattr(event, 'pos') else pygame.mouse.get_pos()
-
         if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Clic gauche
+            if event.button == 1:
                 if self.bouton_retour_options_scores and self.bouton_retour_options_scores.verifier_clic(mouse_pos):
-                    self.scroll_offset_scores = 0  # Reset scroll
-                    self.bouton_retour_options_scores = None  # Clear pour recréation
+                    self.scroll_offset_scores = 0;
+                    self.bouton_retour_options_scores = None;
                     return C.ETAT_MENU_PRINCIPAL
                 if self.scrollbar_scores_poignee_rect and self.scrollbar_scores_poignee_rect.collidepoint(mouse_pos):
                     self.dragging_scrollbar_scores = True
-            elif event.button == 4:  # Molette haut
-                zone_h_vis = self.hauteur - 120 - 80
-                self.scroll_offset_scores = max(0, self.scroll_offset_scores - 30)
-            elif event.button == 5:  # Molette bas
-                zone_h_vis = self.hauteur - 120 - 80
-                max_s = max(0, self.hauteur_contenu_scores - zone_h_vis)
-                self.scroll_offset_scores = min(max_s, self.scroll_offset_scores + 30)
-
-        elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1: self.dragging_scrollbar_scores = False
-
-        elif event.type == pygame.MOUSEMOTION:
-            if self.dragging_scrollbar_scores and self.scrollbar_scores_poignee_rect:
-                zone_h_vis = self.hauteur - 120 - 80
-                mouv_y = event.rel[1];
-                h_poignee = self.scrollbar_scores_poignee_rect.height
-                if (zone_h_vis - h_poignee) > 0 and (self.hauteur_contenu_scores - zone_h_vis) > 0:
-                    delta_scroll = (mouv_y / (zone_h_vis - h_poignee)) * (self.hauteur_contenu_scores - zone_h_vis)
-                    self.scroll_offset_scores = max(0, min(self.scroll_offset_scores + delta_scroll,
-                                                           self.hauteur_contenu_scores - zone_h_vis))
+            elif event.button == 4:
+                zone_h_vis = self.hauteur - 120 - 80; self.scroll_offset_scores = max(0, self.scroll_offset_scores - 30)
+            elif event.button == 5:
+                zone_h_vis = self.hauteur - 120 - 80; max_s = max(0,
+                                                                  self.hauteur_contenu_scores - zone_h_vis); self.scroll_offset_scores = min(
+                    max_s, self.scroll_offset_scores + 30)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.dragging_scrollbar_scores = False
+        elif event.type == pygame.MOUSEMOTION and self.dragging_scrollbar_scores and self.scrollbar_scores_poignee_rect:
+            zone_h_vis = self.hauteur - 120 - 80;
+            mouv_y = event.rel[1];
+            h_poignee = self.scrollbar_scores_poignee_rect.height
+            if (zone_h_vis - h_poignee) > 0 and (self.hauteur_contenu_scores - zone_h_vis) > 0:
+                delta_scroll = (mouv_y / (zone_h_vis - h_poignee)) * (self.hauteur_contenu_scores - zone_h_vis)
+                self.scroll_offset_scores = max(0, min(self.scroll_offset_scores + delta_scroll,
+                                                       self.hauteur_contenu_scores - zone_h_vis))
         return None
 
     def afficher_visualisation_solveur(self, niv_visu, sol_pas, idx_pas_act, iterations_solveur, textures_active,
-                                       msg=""):  # Ajout textures_active
+                                       taille_case_visu):
         if not niv_visu: return
         self.fenetre.fill(C.DARK_BACKGROUND)
-        niv_l_px, niv_h_px = niv_visu.largeur * C.TAILLE_CASE, niv_visu.hauteur * C.TAILLE_CASE
+        # Pour la visu, on utilise la taille de case de base et les images de base pour clarté et performance
+        images_pour_visu = self.images_base
+
+        niv_l_px, niv_h_px = niv_visu.largeur * taille_case_visu, niv_visu.hauteur * taille_case_visu
         off_x_g = (self.largeur - niv_l_px) // 2;
         off_y_g = (self.hauteur - niv_h_px - 120) // 2 + 20
         if off_x_g < 0: off_x_g = 5;
         if off_y_g < 50: off_y_g = 50
         surf_jeu_visu = pygame.Surface((niv_l_px, niv_h_px));
         surf_jeu_visu.fill(C.DARK_BACKGROUND)
-        niv_visu.dessiner(surf_jeu_visu, self.images, textures_active)  # Passer textures_active
+        niv_visu.dessiner(surf_jeu_visu, images_pour_visu, textures_active, taille_case_visu)
         self.fenetre.blit(surf_jeu_visu, (off_x_g, off_y_g))
         y_info = 15;
         type_s_txt = self.jeu_principal.solveur_type_en_cours if self.jeu_principal.solveur_type_en_cours else "Solveur"
@@ -355,28 +389,21 @@ class InterfaceGraphique:
 
     def _creer_elements_options(self):
         self.elements_options["boutons"] = []
-        self.elements_options["sliders"] = {}  # Vider pour recréation
-
+        self.elements_options["sliders"] = {}
         btn_w, btn_h, slider_w, slider_track_h = 350, 50, 300, 8
         x_centre_options = self.largeur // 2
-        y_courant = self.hauteur // 2 - 120  # Démarrer plus haut
-
-        # Slider Volume
+        y_courant = self.hauteur // 2 - 120
         slider_volume = Slider(x_centre_options - slider_w // 2, y_courant, slider_w, slider_track_h,
                                0.0, 1.0, self.jeu_principal.volume_son,
                                label="Volume:", label_font=self.font_options_label, valeur_font=self.font_slider_valeur,
                                action_on_change="set_volume")
         self.elements_options["sliders"]["volume_slider"] = slider_volume
-        y_courant += 70  # Espace pour le slider et son label/valeur
-
-        # Bouton Textures
+        y_courant += 70
         texte_textures = "Textures: Activées" if self.jeu_principal.textures_active else "Textures: Désactivées"
         btn_textures = Bouton(x_centre_options - btn_w // 2, y_courant, btn_w, btn_h, texte_textures,
                               font=self.font_menu, action="toggle_textures")
         self.elements_options["boutons"].append(btn_textures)
         y_courant += btn_h + 30
-
-        # Bouton Retour Menu (commun)
         if not self.bouton_retour_options_scores:
             self.bouton_retour_options_scores = Bouton(self.largeur // 2 - 100, self.hauteur - 70, 200, 50,
                                                        "Retour Menu", font=self.font_menu, action=C.ETAT_MENU_PRINCIPAL)
@@ -386,57 +413,40 @@ class InterfaceGraphique:
         tit_s = self.font_titre.render("Options", True, C.DARK_TEXT_PRIMARY)
         tit_r = tit_s.get_rect(center=(self.largeur // 2, 80));
         self.fenetre.blit(tit_s, tit_r)
-
-        # Recréer les éléments si la liste est vide (ex: premier affichage, ou après changement de taille fenetre)
         if not self.elements_options["boutons"] and not self.elements_options["sliders"]:
             self._creer_elements_options()
-
         mouse_pos = pygame.mouse.get_pos()
-
         for btn in self.elements_options["boutons"]:
             btn.verifier_survol(mouse_pos);
             btn.dessiner(self.fenetre)
-
-        for slider_key in self.elements_options["sliders"]:
-            slider = self.elements_options["sliders"][slider_key]
-            # La vérification de survol est gérée dans handle_event pour les sliders
-            slider.dessiner(self.fenetre)
-
+        for slider_obj in self.elements_options["sliders"].values():
+            slider_obj.dessiner(self.fenetre)
         if self.bouton_retour_options_scores:
             self.bouton_retour_options_scores.verifier_survol(mouse_pos)
             self.bouton_retour_options_scores.dessiner(self.fenetre)
-
         pygame.display.flip()
 
     def gerer_evenements_options(self, event):
         mouse_pos = event.pos if hasattr(event, 'pos') else pygame.mouse.get_pos()
-        action_retournee = None
-
-        # Gérer les boutons
         for btn in self.elements_options["boutons"]:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 action = btn.verifier_clic(mouse_pos)
                 if action == "toggle_textures":
                     self.jeu_principal.toggle_textures()
-                    self._creer_elements_options()  # Recréer pour màj texte bouton
-                    return  # Consommer l'événement
-            btn.verifier_survol(mouse_pos)  # Pour l'affichage
-
-        # Gérer les sliders
+                    self._creer_elements_options()
+                    return
+            btn.verifier_survol(mouse_pos)
         for slider_key, slider_obj in self.elements_options["sliders"].items():
             action_slider, nouvelle_valeur = slider_obj.handle_event(event, mouse_pos)
             if action_slider == "set_volume" and nouvelle_valeur is not None:
                 self.jeu_principal.set_volume(nouvelle_valeur)
-                # Pas besoin de recréer les éléments pour le slider, sa propre méthode dessiner met à jour la valeur
-
-        # Gérer le bouton Retour Menu
         if self.bouton_retour_options_scores:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 action_retour = self.bouton_retour_options_scores.verifier_clic(mouse_pos)
                 if action_retour == C.ETAT_MENU_PRINCIPAL:
-                    self.elements_options = {"boutons": [], "sliders": {}}  # Vider
+                    self.elements_options = {"boutons": [], "sliders": {}}
                     self.bouton_retour_options_scores = None
-                    self.jeu_principal.etat_jeu = C.ETAT_MENU_PRINCIPAL  # Changer l'état dans Jeu
+                    self.jeu_principal.etat_jeu = C.ETAT_MENU_PRINCIPAL
                     self.jeu_principal._adapter_taille_fenetre_pour_niveau()
-                    return  # Consommer l'événement
+                    return
             self.bouton_retour_options_scores.verifier_survol(mouse_pos)

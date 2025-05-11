@@ -1,0 +1,127 @@
+Documentation Technique du Projet Sokoban
+
+1. Structure du Programme
+   Le projet Sokoban est organisé en modules Python pour séparer les préoccupations
+   et améliorer la maintenabilité. Le code source principal se trouve dans le
+   dossier src/.
+
+   1.1. Organisation des Dossiers (principaux)
+        sokoban/            : Racine du projet
+        ├── main.py         : Point d'entrée principal du programme. Initialise
+        │                       Pygame et lance la classe Jeu.
+        ├── assets/         : Ressources statiques
+        │    ├── images/    : Sprites (.png) (murs, sol, joueur, caisses, cibles, icône)
+        │    └── sons/      : Effets sonores (.wav) (déplacement, poussée, victoire)
+        ├── niveaux/        : Fichiers de niveaux par défaut
+        │    └── personalises/: Niveaux créés par l'utilisateur (éditeur)
+        └── sauvegardes/    : Progression du joueur et options (progression.json)
+
+        src/                : Cœur logique et fonctionnel du jeu
+        ├── __init__.py     : Marque src comme un package Python
+        ├── constantes.py   : Constantes globales (couleurs, tailles, chemins, IDs)
+        ├── classes.py      : Modèles de données
+        │     ├── ElementJeu : Base pour objets mobiles/animables
+        │     ├── Case       : Case statique (mur, sol, cible)
+        │     ├── Caisse     : Caisse déplaçable
+        │     ├── Joueur     : Personnage contrôlé
+        │     └── Niveau     : Chargement, grille, logique de victoire
+        ├── jeu.py          : Classe Jeu (boucle principale, états, interactions)
+        ├── interface.py    : InterfaceGraphique (affichage, événements)
+        ├── editeur.py      : EditeurNiveaux (création, modification, sauvegarde)
+        ├── solveurs.py     : Algorithmes de résolution automatique
+        │     ├── Solveur            : Classe abstraite de base
+        │     ├── SolveurBFS         : Recherche en largeur (BFS)
+        │     └── SolveurRetourArriere: Backtracking / DFS
+        ├── ui_elements.py  : Éléments UI réutilisables (Bouton, Slider, …)
+        └── utilitaires.py  : Fonctions utilitaires (chargement, sauvegarde JSON)
+
+2. Flux d’Exécution Général
+   1. main.py initialise Pygame et crée une instance de Jeu.
+   2. Jeu.executer() démarre la boucle principale :
+      a. gerer_evenements()  : traite clavier/souris selon l’état du jeu
+      b. mettre_a_jour()     : met à jour la logique (déplacements, animations, solveur)
+      c. dessiner()          : affiche l’écran courant via InterfaceGraphique
+   3. L’attribut self.etat_jeu dans Jeu dicte le comportement des méthodes.
+   4. Les classes de classes.py modélisent entités et comportements de base.
+   5. EditeurNiveaux permet de créer et sauvegarder des grilles personnalisées.
+   6. Solveurs peuvent être appelés pour résoudre automatiquement ou donner un indice.
+   7. utilitaires.py gère la persistance (scores, options, niveaux).
+
+3. Algorithmes Implémentés
+
+   3.1. Recherche en Largeur (BFS – Breadth-First Search)
+        Fichier : src/solveurs.py (classe SolveurBFS)
+        Objectif : Trouver le chemin le plus court (nombre de mouvements du joueur)
+                   pour amener toutes les caisses sur leurs cibles.
+
+        Fonctionnement :
+        - Chaque « état » = position du joueur + positions des caisses.
+        - On part de l’état initial.
+        - On utilise une file (collections.deque) pour les états à visiter,
+          et un set « visites » pour éviter les cycles.
+        - À chaque itération :
+          • on dépile un état ; si victoire → on retourne le chemin.
+          • sinon, on génère tous les mouvements valides (déplacement simple
+            ou pousse de caisse) et on enfile les nouveaux états non visités.
+        - Arrêt : solution trouvée, file vide (impossible), ou limite d’itérations.
+
+        Utilisation :
+        • Vérifier la solvabilité dans l’éditeur.
+        • Fournir un indice/mouvement optimal.
+        • Visualiser la résolution automatique.
+
+   3.2. Retour Arrière (Backtracking / DFS)
+        Fichier : src/solveurs.py (classe SolveurRetourArriere)
+        Objectif : Trouver un chemin (pas nécessairement optimal) pour résoudre un niveau.
+
+        Fonctionnement :
+        - Recherche en profondeur récursive à partir de l’état initial.
+        - À chaque appel :
+          1. Vérifier victoire → stocker le chemin si trouvé.
+          2. Détection d’impasse simple (_est_impasse_simple) :
+             si une caisse est coincée dans un coin non-cible, on élague.
+          3. Utilisation de visites_dfs pour éviter les cycles dans la même branche.
+          4. Limite de profondeur (C.PROFONDEUR_MAX_BACKTRACKING) et
+             nombre max d’itérations pour éviter l’explosion combinatoire.
+          5. Pour chaque mouvement valide :
+             - Appliquer, récursion, puis backtrack si nécessaire.
+
+        Utilisation :
+        • Alternative au BFS pour trouver rapidement une solution,
+          même si elle est plus longue.
+
+4. Format des Fichiers
+
+   4.1. Fichiers de Niveaux (.txt)
+        - Chaque caractère représente un élément sur la grille :
+          # : Mur
+            (espace) : Sol
+          . : Cible
+          $ : Caisse
+          @ : Joueur
+          * : Caisse sur cible
+          + : Joueur sur cible
+        - Chaque ligne du fichier = une rangée de la grille.
+        - Normalisation : les lignes sont ajustées à la largeur maximale
+          et remplies de sols (espace) à droite.
+        - Lignes vides en fin de fichier ignorées ; au milieu, interprétées
+          comme une rangée de sols.
+
+        Exemple (map1.txt) :
+            #####
+            #   #
+            #$@.#
+            #   #
+            #####
+
+   4.2. Fichier de Sauvegarde (progression.json)
+        - Situé dans sauvegardes/progression.json
+        - Contient la progression du joueur et les options en JSON.
+        - Structure typique :
+          {
+              "niveau_courant": "map1.txt",
+              "positions_caisses": [[x1,y1],…],
+              "position_joueur": [x,y],
+              "options": { "volume": 0.8, "langue": "fr" },
+              "scores": { … }
+          }
