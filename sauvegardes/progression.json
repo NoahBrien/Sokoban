@@ -1,43 +1,39 @@
 {
     "niveaux_completes": [
-        1
+        0
     ],
     "scores": {
         "map1": {
             "mouvements": 6,
-            "temps": 2.54
+            "temps": 6.61
         },
-        "Test Editeur": {
-            "mouvements": 6,
-            "temps": 4.23
+        "map2": {
+            "mouvements": 15,
+            "temps": 4.09
+        },
+        "map3": {
+            "mouvements": 31,
+            "temps": 14.18
         },
         "map4": {
             "mouvements": 8,
-            "temps": 4.63
+            "temps": 2.86
         },
-        "PremierTest": {
-            "mouvements": 18,
-            "temps": 7.68
+        "map5": {
+            "mouvements": 59,
+            "temps": 12.02
         },
-        "map2": {
-            "mouvements": 13,
-            "temps": 9.66
-        },
-        "map3": {
-            "mouvements": 38,
-            "temps": 15.33
-        },
-        "MonNiveauPerso": {
-            "mouvements": 4,
-            "temps": 1.41
-        },
-        "Nouveau": {
-            "mouvements": 4,
-            "temps": 1.96
+        "map6": {
+            "mouvements": 91,
+            "temps": 19.24
         },
         "Editeur1": {
             "mouvements": 2,
-            "temps": 2.73
+            "temps": 1.88
+        },
+        "Test Editeur": {
+            "mouvements": 14,
+            "temps": 4.08
         }
     },
     "niveaux_personnalises": [],
