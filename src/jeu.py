@@ -10,33 +10,61 @@ from . import solveurs
 
 class Jeu:
     def __init__(self):
-        pygame.init();
-        pygame.mixer.init()
         self.largeur_fenetre, self.hauteur_fenetre = C.LARGEUR_MENU, C.HAUTEUR_MENU
         self.interface_graphique = interface.InterfaceGraphique(self.largeur_fenetre, self.hauteur_fenetre, self)
         self.horloge = pygame.time.Clock();
         self.etat_jeu = C.ETAT_MENU_PRINCIPAL;
         self.fonctionnement = True
+
         self.niveau_actuel, self.niveau_actuel_index_global, self.nom_niveau_affiche = None, -1, ""
         self.nb_mouvements, self.temps_debut_niveau, self.temps_ecoule_total_secondes = 0, 0, 0
-        self.sons = utilitaires.charger_sons_sokoban();
+
         self.progression_joueur = utilitaires.charger_progression()
+
+        options_chargees = self.progression_joueur.get("options_jeu", {})
+        self.volume_son = float(options_chargees.get("volume_son", 1.0))
+        self.textures_active = bool(options_chargees.get("textures_active", True))
+        self.son_active = self.volume_son > 0.001
+
+        self.sons = utilitaires.charger_sons_sokoban();
+        self.appliquer_volume_sons()
+
         self.chemins_niveaux_defaut = []
         self.chemins_niveaux_perso = []
         self.rafraichir_listes_niveaux();
+
         self.victoire_detectee = False
-        self.solveur_solution_pas, self.solveur_index_pas_actuel, self.niveau_pour_visualisation = None, 0, None
-        self.solveur_timer_dernier_pas, self.solveur_delai_entre_pas, self.solveur_en_cours, self.etat_avant_solveur = 0, 200, False, None
+        self.solveur_solution_pas, self.solveur_index_pas_actuel, self.solveur_iterations = None, 0, 0
+        self.niveau_pour_visualisation = None
+        self.solveur_timer_dernier_pas, self.solveur_delai_entre_pas = 0, 200
+        self.solveur_en_cours, self.etat_avant_solveur = False, None
         self.solveur_type_en_cours = ""
+
         self.editeur_actif, self.mode_test_editeur = None, False
-
-        self.hint_solution_pour_etat_actuel = None  # Solution BFS pour l'état courant du joueur
-        self.hint_etat_pour_lequel_solution_calculee = None  # Pour savoir si la solution est toujours valide
-        self.hint_next_move_display_pos = None  # (grid_x, grid_y) de la case à surligner
-        self.hint_message = ""
-
+        self.hint_solution_pour_etat_actuel, self.hint_etat_pour_lequel_solution_calculee = None, None
+        self.hint_next_move_display_pos, self.hint_message, self.deadlock_message = None, "", ""
         self.animation_active = False
-        self.FRAMES_ANIMATION_JOUEUR = int(C.FPS * 0.20)
+        self.FRAMES_ANIMATION_JOUEUR = int(C.FPS * 0.15)
+
+    def appliquer_volume_sons(self):
+        if self.sons:
+            for cle_son in self.sons:
+                if self.sons[cle_son]:
+                    self.sons[cle_son].set_volume(self.volume_son if self.son_active else 0.0)
+
+    def set_volume(self, nouveau_volume):
+        self.volume_son = max(0.0, min(1.0, float(nouveau_volume)))
+        self.son_active = self.volume_son > 0.001
+        self.appliquer_volume_sons()
+        if "options_jeu" not in self.progression_joueur:
+            self.progression_joueur["options_jeu"] = {}
+        self.progression_joueur["options_jeu"]["volume_son"] = self.volume_son
+
+    def toggle_textures(self):
+        self.textures_active = not self.textures_active
+        if "options_jeu" not in self.progression_joueur:
+            self.progression_joueur["options_jeu"] = {}
+        self.progression_joueur["options_jeu"]["textures_active"] = self.textures_active
 
     def rafraichir_listes_niveaux(self):
         self.chemins_niveaux_defaut = utilitaires.obtenir_liste_niveaux_defaut();
@@ -49,30 +77,51 @@ class Jeu:
     def _adapter_taille_fenetre_pour_niveau(self):
         n_l, n_h = C.LARGEUR_MENU, C.HAUTEUR_MENU
         if self.etat_jeu == C.ETAT_JEU and self.niveau_actuel:
-            n_l = max(C.LARGEUR_FENETRE_JEU, self.niveau_actuel.largeur * C.TAILLE_CASE + 100)
-            n_h = max(C.HAUTEUR_FENETRE_JEU, self.niveau_actuel.hauteur * C.TAILLE_CASE + 100)
+            marge_h, marge_v = 100, 120
+            n_l = max(C.LARGEUR_FENETRE_JEU, self.niveau_actuel.largeur * C.TAILLE_CASE + marge_h)
+            n_h = max(C.HAUTEUR_FENETRE_JEU, self.niveau_actuel.hauteur * C.TAILLE_CASE + marge_v)
         elif self.etat_jeu == C.ETAT_EDITEUR:
             ed_i = self.interface_graphique.editeur_instance
-            if ed_i:
-                n_l = max(C.LARGEUR_MENU, ed_i.largeur_grille * C.TAILLE_CASE + 250);n_h = max(C.HAUTEUR_MENU,
-                                                                                               ed_i.hauteur_grille * C.TAILLE_CASE + 150)
-            else:
-                n_l = C.LARGEUR_MENU + 200;n_h = C.HAUTEUR_MENU + 100
+            if ed_i:  # Si l'instance existe déjà (ex: on y revient)
+                marge_ed_ui_d, marge_ed_ui_b = 280, 150
+                n_l = max(C.LARGEUR_MENU, ed_i.largeur_grille * C.TAILLE_CASE + marge_ed_ui_d + 20)
+                n_h = max(C.HAUTEUR_MENU, ed_i.hauteur_grille * C.TAILLE_CASE + marge_ed_ui_b + 70)
+            else:  # Si l'instance n'existe pas encore, utiliser des tailles par défaut pour l'éditeur
+                # ou celles basées sur les valeurs par défaut de EditeurNiveaux
+                default_ed_largeur_grille = 15  # Doit correspondre à EditeurNiveaux
+                default_ed_hauteur_grille = 10
+                marge_ed_ui_d, marge_ed_ui_b = 280, 150
+                n_l = max(C.LARGEUR_MENU, default_ed_largeur_grille * C.TAILLE_CASE + marge_ed_ui_d + 20)
+                n_h = max(C.HAUTEUR_MENU, default_ed_hauteur_grille * C.TAILLE_CASE + marge_ed_ui_b + 70)
+
+        n_l = max(n_l, C.LARGEUR_MENU);
+        n_h = max(n_h, C.HAUTEUR_MENU)
         if self.largeur_fenetre != n_l or self.hauteur_fenetre != n_h:
             self.largeur_fenetre, self.hauteur_fenetre = n_l, n_h
             self.interface_graphique.largeur, self.interface_graphique.hauteur = n_l, n_h
             self.interface_graphique.fenetre = pygame.display.set_mode((n_l, n_h))
             if self.etat_jeu == C.ETAT_MENU_PRINCIPAL: self.interface_graphique.boutons_menu = []
+            if self.etat_jeu == C.ETAT_SELECTION_NIVEAU: self.interface_graphique.boutons_selection_niveau = []
+            if self.etat_jeu == C.ETAT_OPTIONS: self.interface_graphique.elements_options = {"boutons": [],
+                                                                                             "sliders": {}}
+            if self.etat_jeu == C.ETAT_EDITEUR and self.interface_graphique.editeur_instance:
+                self.interface_graphique.editeur_instance._creer_boutons_editeur()
+            elif self.etat_jeu == C.ETAT_EDITEUR and self.interface_graphique.editeur_instance is None:
+                # Si on passe à l'éditeur et qu'il n'y a pas d'instance,
+                # on ne peut pas encore appeler _creer_boutons_editeur.
+                # Cela se fera dans afficher_editeur lors de la création.
+                pass
 
     def charger_niveau_par_specification(self, spec_niv):
-        chemin_fichier = spec_niv["data"]
-        self.niveau_actuel_index_global, self.nom_niveau_affiche = spec_niv["index_global"], spec_niv["nom_affiche"]
-        self.niveau_actuel = classes.Niveau(nom_fichier_ou_contenu=chemin_fichier)
+        self.niveau_actuel_index_global = spec_niv["index_global"]
+        self.nom_niveau_affiche = spec_niv["nom_affiche"]
+        self.niveau_actuel = classes.Niveau(nom_fichier_ou_contenu=spec_niv["data"])
         self.reinitialiser_etat_niveau();
         self._adapter_taille_fenetre_pour_niveau()
 
     def charger_niveau_temporaire_pour_test(self, contenu_str, editeur_ref):
-        self.editeur_actif, self.mode_test_editeur = editeur_ref, True
+        self.editeur_actif = editeur_ref
+        self.mode_test_editeur = True
         self.niveau_actuel = classes.Niveau(nom_fichier_ou_contenu=contenu_str, est_contenu_direct=True)
         self.nom_niveau_affiche = "Test Editeur";
         self.reinitialiser_etat_niveau();
@@ -84,80 +133,77 @@ class Jeu:
         self.victoire_detectee = False;
         self.interface_graphique.message_victoire_affiche_temps = 0
         if self.niveau_actuel: self.niveau_actuel.reinitialiser()
-        # Réinitialiser l'indice
-        self.hint_solution_pour_etat_actuel = None
-        self.hint_etat_pour_lequel_solution_calculee = None
-        self.hint_next_move_display_pos = None
-        self.hint_message = ""
+        self.hint_solution_pour_etat_actuel, self.hint_etat_pour_lequel_solution_calculee = None, None
+        self.hint_next_move_display_pos, self.hint_message, self.deadlock_message = None, "", ""
         self.animation_active = False
 
     def executer(self):
         while self.fonctionnement:
-            if self.etat_jeu == C.ETAT_JEU and self.temps_debut_niveau > 0 and not self.victoire_detectee: self.temps_ecoule_total_secondes = time.time() - self.temps_debut_niveau
-            if not self.animation_active:
+            if self.etat_jeu == C.ETAT_JEU and self.temps_debut_niveau > 0 and not self.victoire_detectee:
+                self.temps_ecoule_total_secondes = time.time() - self.temps_debut_niveau
+            if not self.animation_active or (
+                    self.etat_jeu == C.ETAT_VISUALISATION_SOLVEUR and not self.solveur_en_cours):
                 self.gerer_evenements()
             self.mettre_a_jour();
             self.dessiner();
             self.horloge.tick(C.FPS)
         utilitaires.sauvegarder_progression(self.progression_joueur);
-        pygame.quit()
 
     def demander_indice(self):
         if not self.niveau_actuel or self.victoire_detectee or self.animation_active:
             self.hint_message = "";
             self.hint_next_move_display_pos = None;
             return
-
         etat_courant_jeu = self.niveau_actuel.get_etat_pour_solveur()
-
-        # Si la solution d'indice n'existe pas ou a été calculée pour un état différent
         if not self.hint_solution_pour_etat_actuel or self.hint_etat_pour_lequel_solution_calculee != etat_courant_jeu:
             self.hint_message = "Calcul de l'indice (BFS)...";
             self.hint_next_move_display_pos = None
-            self.interface_graphique.afficher_ecran_jeu(self.niveau_actuel, self.nb_mouvements,
-                                                        self.temps_ecoule_total_secondes,
-                                                        self.hint_next_move_display_pos, self.hint_message)
+            self.interface_graphique.afficher_ecran_jeu(self.niveau_actuel, self.nom_niveau_affiche, self.nb_mouvements,
+                                                        self.temps_ecoule_total_secondes, self.textures_active,
+                                                        self.hint_next_move_display_pos, self.hint_message,
+                                                        self.deadlock_message)
             pygame.display.flip();
             pygame.event.pump()
-
-            # Créer une copie propre du niveau pour la simulation du solveur, dans l'état actuel du jeu
             niveau_sim = classes.Niveau(nom_fichier_ou_contenu=self.niveau_actuel.contenu_initial_str,
                                         est_contenu_direct=True)
-            niveau_sim.appliquer_etat_solveur(etat_courant_jeu)  # Mettre la copie dans l'état actuel du jeu
-
-            solveur = solveurs.SolveurBFS(etat_courant_jeu)  # Le solveur part de cet état
-            self.hint_solution_pour_etat_actuel = solveur.resoudre(niveau_sim)  # Il simule sur la copie `niveau_sim`
-            self.hint_etat_pour_lequel_solution_calculee = etat_courant_jeu  # Enregistrer pour quel état cette solution est valide
-
+            if etat_courant_jeu: niveau_sim.appliquer_etat_solveur(etat_courant_jeu)
+            solveur = solveurs.SolveurBFS(etat_courant_jeu)
+            solution_bfs, _ = solveur.resoudre(niveau_sim)
+            self.hint_solution_pour_etat_actuel = solution_bfs
+            self.hint_etat_pour_lequel_solution_calculee = etat_courant_jeu
         if self.hint_solution_pour_etat_actuel and len(self.hint_solution_pour_etat_actuel) > 0:
-            premier_mouvement_symbole = self.hint_solution_pour_etat_actuel[0]  # On ne montre que le premier pas
-            dx, dy = 0, 0;
-            direction_txt = "?"
-            if premier_mouvement_symbole == 'H':
-                dx, dy = 0, -1; direction_txt = "Haut"
-            elif premier_mouvement_symbole == 'B':
-                dx, dy = 0, 1; direction_txt = "Bas"
-            elif premier_mouvement_symbole == 'G':
-                dx, dy = -1, 0; direction_txt = "Gauche"
-            elif premier_mouvement_symbole == 'D':
-                dx, dy = 1, 0; direction_txt = "Droite"
-
+            mvt_sym = self.hint_solution_pour_etat_actuel[0]
+            dx, dy, dir_txt = 0, 0, "?"
+            if mvt_sym == 'H':
+                dx, dy, dir_txt = 0, -1, "Haut"
+            elif mvt_sym == 'B':
+                dx, dy, dir_txt = 0, 1, "Bas"
+            elif mvt_sym == 'G':
+                dx, dy, dir_txt = -1, 0, "Gauche"
+            elif mvt_sym == 'D':
+                dx, dy, dir_txt = 1, 0, "Droite"
             if self.niveau_actuel.joueur:
-                # La position à surligner est la case où le joueur se déplacerait
                 self.hint_next_move_display_pos = (
                 self.niveau_actuel.joueur.grid_x + dx, self.niveau_actuel.joueur.grid_y + dy)
-                self.hint_message = f"Indice: Aller {direction_txt}"
-            else:  # Ne devrait pas arriver si le niveau est valide
-                self.hint_message = "Erreur joueur indice.";
-                self.hint_next_move_display_pos = None
+                self.hint_message = f"Indice: Aller {dir_txt}"
+            else:
+                self.hint_message = "Erreur joueur indice."; self.hint_next_move_display_pos = None
         else:
             self.hint_message = "Aucun indice trouvé (BFS).";
             self.hint_next_move_display_pos = None
-            self.hint_solution_pour_etat_actuel = None  # Réinitialiser pour forcer recalcul si redemandé
+            self.hint_solution_pour_etat_actuel = None
 
     def gerer_evenements(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT: self.fonctionnement = False
+
+            if self.etat_jeu == C.ETAT_OPTIONS:
+                self.interface_graphique.gerer_evenements_options(event)
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.etat_jeu = C.ETAT_MENU_PRINCIPAL
+                    self._adapter_taille_fenetre_pour_niveau()
+                continue
+
             if self.etat_jeu == C.ETAT_MENU_PRINCIPAL:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     n_e = self.interface_graphique.gerer_clic_menu_principal(event.pos)
@@ -165,11 +211,11 @@ class Jeu:
                         if n_e == C.ETAT_QUITTER:
                             self.fonctionnement = False
                         else:
-                            self.etat_jeu = n_e;self._adapter_taille_fenetre_pour_niveau()
+                            self.etat_jeu = n_e; self._adapter_taille_fenetre_pour_niveau()
             elif self.etat_jeu == C.ETAT_SELECTION_NIVEAU:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     n_e_a = self.interface_graphique.gerer_clic_selection_niveau(event.pos, event.button)
-                    if n_e_a: self.etat_jeu = n_e_a;self._adapter_taille_fenetre_pour_niveau()
+                    if n_e_a: self.etat_jeu = n_e_a; self._adapter_taille_fenetre_pour_niveau()
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     self.etat_jeu = C.ETAT_MENU_PRINCIPAL;
                     self.interface_graphique.boutons_selection_niveau = [];
@@ -177,27 +223,30 @@ class Jeu:
                     self._adapter_taille_fenetre_pour_niveau()
             elif self.etat_jeu == C.ETAT_JEU:
                 if event.type == pygame.KEYDOWN:
-                    if event.key != pygame.K_h:  # Si ce n'est pas une demande d'indice
-                        self.hint_next_move_display_pos = None;
-                        self.hint_message = ""
-                        # Si le joueur fait un mouvement, la solution d'indice est invalidée
-                        self.hint_solution_pour_etat_actuel = None
-                        self.hint_etat_pour_lequel_solution_calculee = None
+                    if event.key != pygame.K_h: self.hint_next_move_display_pos = None; self.hint_message = ""; self.hint_solution_pour_etat_actuel = None
                     if not self.victoire_detectee:
-                        m_e = False
                         key_map = {pygame.K_UP: 'u', pygame.K_w: 'u', pygame.K_z: 'u', pygame.K_DOWN: 'd',
-                                   pygame.K_s: 'd',
-                                   pygame.K_LEFT: 'l', pygame.K_a: 'l', pygame.K_q: 'l', pygame.K_RIGHT: 'r',
-                                   pygame.K_d: 'r'}
+                                   pygame.K_s: 'd', pygame.K_LEFT: 'l', pygame.K_a: 'l', pygame.K_q: 'l',
+                                   pygame.K_RIGHT: 'r', pygame.K_d: 'r'}
                         if event.key in key_map:
                             moves = {'u': (0, -1), 'd': (0, 1), 'l': (-1, 0), 'r': (1, 0)}
-                            if self.niveau_actuel.deplacer_joueur(*moves[key_map[event.key]], self.sons,
-                                                                  self.FRAMES_ANIMATION_JOUEUR):
+                            dx_dy = moves[key_map[event.key]]
+                            if self.niveau_actuel.deplacer_joueur(*dx_dy, self.sons, self.FRAMES_ANIMATION_JOUEUR,
+                                                                  son_active=self.son_active):
                                 self.animation_active = True;
-                                m_e = True
+                                self.nb_mouvements += 1
+                                etat_apres_mvt = self.niveau_actuel.get_etat_pour_solveur()
+                                if etat_apres_mvt:
+                                    _jp, caisses_pt = etat_apres_mvt
+                                    temp_s = solveurs.SolveurRetourArriere(None)
+                                    self.deadlock_message = "Attention: Impasse possible !" if temp_s._est_impasse_simple(
+                                        caisses_pt, self.niveau_actuel) else ""
+                                else:
+                                    self.deadlock_message = ""
                         elif event.key == pygame.K_u:
-                            if self.niveau_actuel.annuler_dernier_mouvement() and self.nb_mouvements > 0: self.nb_mouvements -= 1
-                        if m_e: self.nb_mouvements += 1
+                            if self.niveau_actuel.annuler_dernier_mouvement():
+                                if self.nb_mouvements > 0: self.nb_mouvements -= 1
+                                self.deadlock_message = ""
                     if event.key == pygame.K_h:
                         self.demander_indice()
                     elif event.key == pygame.K_r:
@@ -214,32 +263,31 @@ class Jeu:
                             self.etat_jeu = C.ETAT_MENU_PRINCIPAL
                         self.hint_next_move_display_pos = None;
                         self.hint_message = "";
+                        self.deadlock_message = "";
                         self.hint_solution_pour_etat_actuel = None;
                         self._adapter_taille_fenetre_pour_niveau()
                     elif event.key == pygame.K_F1:
                         self.lancer_resolution_auto("bfs")
                     elif event.key == pygame.K_F2:
                         self.lancer_resolution_auto("backtracking")
-            elif self.etat_jeu == C.ETAT_EDITEUR:  # ... (code identique)
+            elif self.etat_jeu == C.ETAT_EDITEUR:
                 self.interface_graphique.gerer_evenement_editeur(event)
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    if self.interface_graphique.editeur_instance and self.interface_graphique.editeur_instance.input_nom_actif:
-                        self.interface_graphique.editeur_instance.input_nom_actif = False;
-                        self.interface_graphique.editeur_instance.temp_nom_niveau = self.interface_graphique.editeur_instance.nom_niveau_en_cours
-                    else:
-                        self.etat_jeu = C.ETAT_MENU_PRINCIPAL;self.interface_graphique.editeur_instance = None;self._adapter_taille_fenetre_pour_niveau()
-            elif self.etat_jeu == C.ETAT_SCORES:  # ... (code identique)
-                action_score = None
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    action_score = self.interface_graphique.gerer_clic_scores(event.pos, event.button, event.type)
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    if event.button == 1: self.interface_graphique.gerer_clic_scores(event.pos, event.type, event.type)
-                elif event.type == pygame.MOUSEMOTION:
-                    if self.interface_graphique.dragging_scrollbar_scores: self.interface_graphique.gerer_clic_scores(
-                        event.pos, event.type, event.rel)
-                if action_score == C.ETAT_MENU_PRINCIPAL: self.etat_jeu = C.ETAT_MENU_PRINCIPAL; self._adapter_taille_fenetre_pour_niveau()
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE: self.etat_jeu = C.ETAT_MENU_PRINCIPAL; self.interface_graphique.scroll_offset_scores = 0; self._adapter_taille_fenetre_pour_niveau()
-            elif self.etat_jeu == C.ETAT_VISUALISATION_SOLVEUR:  # ... (code identique)
+                    if not (
+                            self.interface_graphique.editeur_instance and self.interface_graphique.editeur_instance.input_nom_actif):
+                        self.etat_jeu = C.ETAT_MENU_PRINCIPAL;
+                        self.interface_graphique.editeur_instance = None;
+                        self._adapter_taille_fenetre_pour_niveau()
+            elif self.etat_jeu == C.ETAT_SCORES:
+                action_res = self.interface_graphique.gerer_evenements_scores(event)
+                if action_res == C.ETAT_MENU_PRINCIPAL:
+                    self.etat_jeu = C.ETAT_MENU_PRINCIPAL
+                    self._adapter_taille_fenetre_pour_niveau()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    self.etat_jeu = C.ETAT_MENU_PRINCIPAL
+                    self.interface_graphique.scroll_offset_scores = 0
+                    self._adapter_taille_fenetre_pour_niveau()
+            elif self.etat_jeu == C.ETAT_VISUALISATION_SOLVEUR:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_SPACE:
                         self.avancer_pas_solveur()
@@ -251,7 +299,8 @@ class Jeu:
                             self.etat_avant_solveur)
                         self.solveur_solution_pas = None;
                         self.niveau_pour_visualisation = None;
-                        self.etat_avant_solveur = None
+                        self.etat_avant_solveur = None;
+                        self.solveur_iterations = 0
 
     def mettre_a_jour(self):
         if self.etat_jeu == C.ETAT_JEU and self.niveau_actuel:
@@ -260,14 +309,15 @@ class Jeu:
                 if self.niveau_actuel.verifier_victoire():
                     self.victoire_detectee = True;
                     self.hint_next_move_display_pos = None;
-                    self.hint_message = ""  # Nettoyer indice à la victoire
+                    self.hint_message = "";
+                    self.deadlock_message = ""
                     if not self.mode_test_editeur:
-                        if self.sons and self.sons.get("victoire"): self.sons["victoire"].play()
+                        if self.sons and self.sons.get("victoire") and self.son_active: self.sons["victoire"].play()
                         self.enregistrer_score()
                     else:
-                        if self.sons and self.sons.get("victoire"): self.sons["victoire"].play()
-        elif self.etat_jeu == C.ETAT_VISUALISATION_SOLVEUR and self.solveur_solution_pas:
-            if pygame.time.get_ticks() - self.solveur_timer_dernier_pas > self.solveur_delai_entre_pas: self.solveur_timer_dernier_pas = pygame.time.get_ticks()
+                        if self.sons and self.sons.get("victoire") and self.son_active: self.sons["victoire"].play()
+        elif self.etat_jeu == C.ETAT_VISUALISATION_SOLVEUR and self.solveur_en_cours:
+            pass
 
     def dessiner(self):
         if self.etat_jeu == C.ETAT_MENU_PRINCIPAL:
@@ -275,45 +325,43 @@ class Jeu:
         elif self.etat_jeu == C.ETAT_SELECTION_NIVEAU:
             self.interface_graphique.afficher_selection_niveau(self.chemins_niveaux_defaut, self.chemins_niveaux_perso)
         elif self.etat_jeu == C.ETAT_JEU:
-            self.interface_graphique.afficher_ecran_jeu(self.niveau_actuel, self.nb_mouvements,
-                                                        self.temps_ecoule_total_secondes,
-                                                        self.hint_next_move_display_pos, self.hint_message)
+            self.interface_graphique.afficher_ecran_jeu(self.niveau_actuel, self.nom_niveau_affiche, self.nb_mouvements,
+                                                        self.temps_ecoule_total_secondes, self.textures_active,
+                                                        self.hint_next_move_display_pos, self.hint_message,
+                                                        self.deadlock_message)
         elif self.etat_jeu == C.ETAT_EDITEUR:
-            self.interface_graphique.afficher_editeur()
+            self.interface_graphique.afficher_editeur()  # La méthode interne gère la création/dessin
+
         elif self.etat_jeu == C.ETAT_SCORES:
             scores_tries = dict(sorted(self.progression_joueur.get("scores", {}).items(), key=lambda item: (
             item[1].get('mouvements', float('inf')), item[1].get('temps', float('inf')))))
             self.interface_graphique.afficher_scores(scores_tries)
+        elif self.etat_jeu == C.ETAT_OPTIONS:
+            self.interface_graphique.afficher_options()
         elif self.etat_jeu == C.ETAT_VISUALISATION_SOLVEUR:
-            msg = "Résolution..."
-            if self.solveur_en_cours:
-                msg = f"Calcul ({self.solveur_type_en_cours})..."
-            elif self.solveur_solution_pas:
-                msg = f"Solution ({self.solveur_type_en_cours}) trouvée!"
-                if self.solveur_index_pas_actuel >= len(
-                    self.solveur_solution_pas or []): msg = "Visualisation terminée."
-            else:
-                msg = f"Aucune solution ({self.solveur_type_en_cours})."
             self.interface_graphique.afficher_visualisation_solveur(self.niveau_pour_visualisation,
                                                                     self.solveur_solution_pas,
-                                                                    self.solveur_index_pas_actuel, msg)
+                                                                    self.solveur_index_pas_actuel,
+                                                                    self.solveur_iterations, self.textures_active)
 
     def enregistrer_score(self):
-        if not self.niveau_actuel or self.mode_test_editeur: return
-        cle_s = str(self.nom_niveau_affiche);
-        scr_act = self.progression_joueur.setdefault("scores", {});
-        scr_prec = scr_act.get(cle_s)
-        m_s = False
-        if scr_prec is None:
-            m_s = True
-        else:
-            if self.nb_mouvements < scr_prec["mouvements"]:
-                m_s = True
-            elif self.nb_mouvements == scr_prec["mouvements"] and self.temps_ecoule_total_secondes < scr_prec["temps"]:
-                m_s = True
-        if m_s: scr_act[cle_s] = {"mouvements": self.nb_mouvements,
-                                  "temps": round(self.temps_ecoule_total_secondes, 2)}; print(
-            f"Nouveau record pour {cle_s}!")
+        if not self.niveau_actuel or self.mode_test_editeur or not self.nom_niveau_affiche: return
+        cle_score_niveau = str(self.nom_niveau_affiche)
+        scores_globaux = self.progression_joueur.setdefault("scores", {})
+        score_precedent = scores_globaux.get(cle_score_niveau)
+        maj_score = False
+        if score_precedent is None or \
+                self.nb_mouvements < score_precedent.get("mouvements", float('inf')) or \
+                (self.nb_mouvements == score_precedent.get("mouvements", float('inf')) and \
+                 self.temps_ecoule_total_secondes < score_precedent.get("temps", float('inf'))):
+            maj_score = True
+        if maj_score:
+            scores_globaux[cle_score_niveau] = {"mouvements": self.nb_mouvements,
+                                                "temps": round(self.temps_ecoule_total_secondes, 2)}
+        joueur_data = self.progression_joueur.setdefault("joueur", {"nom": "Joueur1", "niveaux_completes": []})
+        if "niveaux_completes" not in joueur_data: joueur_data["niveaux_completes"] = []
+        if cle_score_niveau not in joueur_data["niveaux_completes"]:
+            joueur_data["niveaux_completes"].append(cle_score_niveau)
 
     def passer_au_niveau_suivant_ou_menu(self):
         if self.mode_test_editeur:
@@ -323,7 +371,7 @@ class Jeu:
             self.interface_graphique.editeur_instance = self.editeur_actif
             if self.interface_graphique.editeur_instance:
                 self.interface_graphique.editeur_instance.jeu_principal = self
-                self.interface_graphique.editeur_instance.message_info = "Test terminé. Retour à l'éditeur."
+                self.interface_graphique.editeur_instance.message_info = "Test terminé. Retour éditeur."
                 self.interface_graphique.editeur_instance.message_couleur = C.DARK_ACCENT_INFO
             self.editeur_actif = None
         else:
@@ -335,6 +383,7 @@ class Jeu:
         self.victoire_detectee = False;
         self.hint_next_move_display_pos = None;
         self.hint_message = "";
+        self.deadlock_message = "";
         self.hint_solution_pour_etat_actuel = None;
         self._adapter_taille_fenetre_pour_niveau()
 
@@ -343,50 +392,56 @@ class Jeu:
         self.etat_avant_solveur = self.niveau_actuel.get_etat_pour_solveur()
         self.niveau_pour_visualisation = classes.Niveau(nom_fichier_ou_contenu=self.niveau_actuel.contenu_initial_str,
                                                         est_contenu_direct=True)
-        self.niveau_pour_visualisation.appliquer_etat_solveur(self.etat_avant_solveur)
-        etat_init_sol = self.niveau_pour_visualisation.get_etat_pour_solveur()
-        self.solveur_solution_pas = None;
-        self.solveur_index_pas_actuel = 0;
+        if self.etat_avant_solveur: self.niveau_pour_visualisation.appliquer_etat_solveur(self.etat_avant_solveur)
+        etat_init_pour_solveur = self.niveau_pour_visualisation.get_etat_pour_solveur()
+        self.solveur_solution_pas, self.solveur_index_pas_actuel, self.solveur_iterations = None, 0, 0
         self.solveur_timer_dernier_pas = pygame.time.get_ticks();
         self.solveur_en_cours = True
-        self.solveur_type_en_cours = type_solveur.upper()
+        self.solveur_type_en_cours = type_solveur.upper();
         self.etat_jeu = C.ETAT_VISUALISATION_SOLVEUR
-        pygame.display.flip()
+        self.dessiner();
+        pygame.event.pump()  # Pour afficher "Calcul en cours..."
+        solution_algo, iterations_algo = None, 0
         if type_solveur == "bfs":
-            solv = solveurs.SolveurBFS(etat_init_sol); self.solveur_solution_pas = solv.resoudre(
+            solv = solveurs.SolveurBFS(etat_init_pour_solveur); solution_algo, iterations_algo = solv.resoudre(
                 self.niveau_pour_visualisation)
         elif type_solveur == "backtracking":
-            solv = solveurs.SolveurRetourArriere(etat_init_sol); self.solveur_solution_pas = solv.resoudre(
-                self.niveau_pour_visualisation, C.PROFONDEUR_MAX_BACKTRACKING)
+            solv = solveurs.SolveurRetourArriere(
+                etat_init_pour_solveur); solution_algo, iterations_algo = solv.resoudre(self.niveau_pour_visualisation,
+                                                                                        C.PROFONDEUR_MAX_BACKTRACKING)
         else:
-            print(
-                f"Type de solveur inconnu: {type_solveur}");self.solveur_en_cours = False;self.etat_jeu = C.ETAT_JEU; self.niveau_actuel.appliquer_etat_solveur(
-                self.etat_avant_solveur); return
-        self.solveur_en_cours = False
-        if self.solveur_solution_pas:
-            print(
-                f"Solution ({type_solveur}): {self.solveur_solution_pas}"); self.niveau_pour_visualisation.appliquer_etat_solveur(
-                etat_init_sol)
-        else:
-            print(f"Aucune solution trouvée par {type_solveur}.")
+            print(f"Solveur inconnu: {type_solveur}");
+            self.solveur_en_cours = False;
+            self.etat_jeu = C.ETAT_JEU
+            if self.niveau_actuel and self.etat_avant_solveur: self.niveau_actuel.appliquer_etat_solveur(
+                self.etat_avant_solveur)
+            return
+        self.solveur_en_cours = False;
+        self.solveur_solution_pas = solution_algo;
+        self.solveur_iterations = iterations_algo
+        if self.solveur_solution_pas: self.niveau_pour_visualisation.appliquer_etat_solveur(etat_init_pour_solveur)
+        # else: print(f"Pas de solution ({type_solveur}) après {self.solveur_iterations} iter.") # Message déjà dans solveur
 
     def avancer_pas_solveur(self):
         if self.solveur_solution_pas and self.niveau_pour_visualisation and self.solveur_index_pas_actuel < len(
                 self.solveur_solution_pas):
             m_sym = self.solveur_solution_pas[self.solveur_index_pas_actuel];
             dx, dy = 0, 0
-            if m_sym == 'H': dx, dy = 0, -1
-            elif m_sym == 'B': dx, dy = 0, 1
-            elif m_sym == 'G': dx, dy = -1, 0
-            elif m_sym == 'D': dx, dy = 1, 0
-            self.niveau_pour_visualisation.deplacer_joueur(dx, dy);
+            if m_sym == 'H':
+                dx, dy = 0, -1
+            elif m_sym == 'B':
+                dx, dy = 0, 1
+            elif m_sym == 'G':
+                dx, dy = -1, 0
+            elif m_sym == 'D':
+                dx, dy = 1, 0
+            self.niveau_pour_visualisation.deplacer_joueur(dx, dy, simuler_seulement=True);
             self.solveur_index_pas_actuel += 1;
-            self.solveur_timer_dernier_pas = pygame.time.get_ticks()  # Note: deplacer_joueur pour la visu n'anime pas
-            if self.solveur_index_pas_actuel >= len(self.solveur_solution_pas): print("Visualisation terminée.")
-        else:
-            print("Fin de solution ou pas de solution.")
+            self.solveur_timer_dernier_pas = pygame.time.get_ticks()
+            # if self.solveur_index_pas_actuel >= len(self.solveur_solution_pas): print("Visualisation terminée.") # Message peut être redondant avec l'affichage
+        # else: print("Fin de solution ou pas de solution.")
 
     def terminer_visualisation_solveur_rapidement(self):
         if self.solveur_solution_pas and self.niveau_pour_visualisation:
             while self.solveur_index_pas_actuel < len(self.solveur_solution_pas): self.avancer_pas_solveur()
-            print("Solution appliquée rapidement.")
+            # print("Solution appliquée rapidement.")

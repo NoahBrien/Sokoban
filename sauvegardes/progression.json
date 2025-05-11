@@ -1,44 +1,15 @@
 {
+    "joueur": {
+        "niveaux_completes": [],
+        "nom": "Joueur1"
+    },
     "niveaux_completes": [
         0
     ],
-    "scores": {
-        "map1": {
-            "mouvements": 6,
-            "temps": 6.61
-        },
-        "map2": {
-            "mouvements": 15,
-            "temps": 4.09
-        },
-        "map3": {
-            "mouvements": 31,
-            "temps": 14.18
-        },
-        "map4": {
-            "mouvements": 8,
-            "temps": 2.86
-        },
-        "map5": {
-            "mouvements": 59,
-            "temps": 12.02
-        },
-        "map6": {
-            "mouvements": 91,
-            "temps": 19.24
-        },
-        "Editeur1": {
-            "mouvements": 2,
-            "temps": 1.88
-        },
-        "Test Editeur": {
-            "mouvements": 14,
-            "temps": 4.08
-        }
-    },
     "niveaux_personnalises": [],
-    "joueur": {
-        "nom": "Joueur1",
-        "niveaux_completes": []
-    }
+    "options_jeu": {
+        "textures_active": true,
+        "volume_son": 1.0
+    },
+    "scores": {}
 }
