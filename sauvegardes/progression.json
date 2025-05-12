@@ -1,6 +1,10 @@
 {
     "joueur": {
-        "niveaux_completes": [],
+        "niveaux_completes": [
+            "map1",
+            "map4",
+            "map5"
+        ],
         "nom": "Joueur1"
     },
     "niveaux_completes": [
@@ -11,5 +15,18 @@
         "textures_active": true,
         "volume_son": 1.0
     },
-    "scores": {}
+    "scores": {
+        "map1": {
+            "mouvements": 6,
+            "temps": 6.63
+        },
+        "map4": {
+            "mouvements": 31,
+            "temps": 9.04
+        },
+        "map5": {
+            "mouvements": 93,
+            "temps": 18.56
+        }
+    }
 }
