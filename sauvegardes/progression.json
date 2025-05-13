@@ -3,7 +3,9 @@
         "niveaux_completes": [
             "map1",
             "map4",
-            "map5"
+            "map5",
+            "map2",
+            "map3"
         ],
         "nom": "Joueur1"
     },
@@ -19,6 +21,14 @@
         "map1": {
             "mouvements": 6,
             "temps": 6.63
+        },
+        "map2": {
+            "mouvements": 87,
+            "temps": 26.82
+        },
+        "map3": {
+            "mouvements": 15,
+            "temps": 4.48
         },
         "map4": {
             "mouvements": 31,
