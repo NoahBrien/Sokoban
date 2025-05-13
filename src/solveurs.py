@@ -1,9 +1,6 @@
 from abc import ABC, abstractmethod
 import collections
-try:
-    from . import constantes as C
-except ImportError:
-    import constantes as C
+from . import constantes as C
 
 class Solveur(ABC):
     """Classe de base pour tous les solveurs de Sokoban."""
