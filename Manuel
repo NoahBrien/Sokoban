@@ -22,7 +22,7 @@ Sokoban Deluxe ajoute :
 1. Lancez le jeu.  
 2. Dans le Menu Principal, sélectionnez « Nouvelle Partie ».  
 3. Choisissez un niveau.  
-4. Déplacez-vous (Flèches ou Z/Q/S/D) pour pousser les caisses.  
+4. Déplacez-vous (Flèches ou W / A / S / D) pour pousser les caisses.
 5. Placez toutes les caisses sur les cibles (points lumineux) pour gagner !
 
 3. MENU PRINCIPAL
@@ -44,7 +44,7 @@ COMMANDES
 ––––––––  
 Déplacement :  
   • Flèches (↑ ↓ ← →)  
-  • Z / Q / S / D (ou W / A / S / D)  
+  • W / A / S / D
 Annuler : U  
 Recommencer : R  
 Indice : H (montre la case où aller)  
