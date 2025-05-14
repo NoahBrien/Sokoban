@@ -1,0 +1,129 @@
+════════════════════════════════════════════════════════════════════════════════
+                                  SOKOBAN DELUXE
+                        Guide d’utilisation et d’initiation
+════════════════════════════════════════════════════════════════════════════════
+
+1. INTRODUCTION
+────────────────────────────────────────────────────────────────────────────────
+Sokoban (qui signifie “magasinier” en japonais) est un classique du puzzle
+dans lequel vous poussez des caisses pour les placer sur des emplacements
+désignés (cibles) dans un entrepôt.  
+– Vous ne pouvez que pousser les caisses (jamais tirer).  
+– Une seule caisse à la fois.  
+
+Sokoban Deluxe ajoute :  
+• Graphismes améliorés  
+• Éditeur de niveaux intégré  
+• Solveurs automatiques (BFS et Backtracking)  
+• Statistiques et indices  
+
+2. DÉMARRAGE RAPIDE
+────────────────────────────────────────────────────────────────────────────────
+1. Lancez le jeu.  
+2. Dans le Menu Principal, sélectionnez « Nouvelle Partie ».  
+3. Choisissez un niveau.  
+4. Déplacez-vous (Flèches ou Z/Q/S/D) pour pousser les caisses.  
+5. Placez toutes les caisses sur les cibles (points lumineux) pour gagner !
+
+3. MENU PRINCIPAL
+────────────────────────────────────────────────────────────────────────────────
+• Nouvelle Partie : Sélection des niveaux.  
+• Éditeur de Niveaux : Créez vos propres puzzles.  
+• Scores : Meilleurs scores enregistrés.  
+• Options : Volume, textures…  
+• Quitter : Ferme le jeu.  
+
+4. JOUER À SOKOBAN DELUXE
+────────────────────────────────────────────────────────────────────────────────
+OBJECTIF  
+Poussez chaque caisse (marron) sur une cible (lumineuse). Une caisse sur  
+cible change d’apparence. Le niveau est terminé lorsque toutes les caisses  
+reposent sur les cibles.
+
+COMMANDES  
+––––––––  
+Déplacement :  
+  • Flèches (↑ ↓ ← →)  
+  • Z / Q / S / D (ou W / A / S / D)  
+Annuler : U  
+Recommencer : R  
+Indice : H (montre la case où aller)  
+Zoom : Molette souris  
+Visu. BFS : F1  
+Visu. Backtracking : F2  
+Retour menu : ESC  
+
+INTERFACE (HUD)  
+––––––––––––  
+• Nom du Niveau (en haut à gauche)  
+• Mouvements (poussées + déplacements)  
+• Temps écoulé  
+• Rappel commandes (en bas)  
+• Messages d’indice / avertissement  
+
+GAGNER UN NIVEAU  
+––––––––––––––––  
+Affichage de « NIVEAU TERMINÉ ! » puis retour à la sélection de niveaux.  
+Scores (mouvements et temps) sauvegardés automatiquement.
+
+5. ÉDITEUR DE NIVEAUX
+────────────────────────────────────────────────────────────────────────────────
+ACCÈS  
+Menu Principal → Éditeur de Niveaux  
+
+PALETTE D’ÉLÉMENTS  
+–––––––––––––––––  
+🧱 Mur (#)  
+⬜ Sol ( )  
+📦 Caisse ($)  
+🎯 Cible (.)  
+🧑 Joueur (@)  
+
+PANNEAU DE CONTRÔLE  
+––––––––––––––––––  
+• Nom du Niveau : Modifier via bouton (Entrée pour valider, ESC pour annuler).  
+• Sauvegarder : Vérifie et enregistre (niveaux/personnalises/).  
+• Tester : Lance le niveau en mode jeu.  
+• L+ / L- : Largeur + / –  
+• H+ / H- : Hauteur + / –  
+
+COMMANDES  
+––––––––  
+Clic gauche : placer l’élément sélectionné  
+Molette : zoom  
+ESC : quitter / annuler nom  
+
+CONSEILS  
+––––––  
+• Un joueur unique  
+• Idéal : autant de caisses que de cibles  
+• Encadrez le niveau par des murs pour éviter de “perdre” une caisse  
+
+6. SCORES
+────────────────────────────────────────────────────────────────────────────────
+Affiché depuis le Menu Principal → Scores :  
+– Liste des niveaux complétés  
+– Meilleurs mouvements (moins = mieux)  
+– Meilleur temps (en cas d’égalité)  
+
+Retour : ESC ou “Retour Menu”
+
+7. OPTIONS
+────────────────────────────────────────────────────────────────────────────────
+• Volume : curseur 0 – 100%  
+• Textures : activer / désactiver (formes simples)  
+
+Modifications sauvegardées automatiquement.
+
+8. QUITTER LE JEU
+────────────────────────────────────────────────────────────────────────────────
+Menu Principal → Quitter  
+Votre progression et options sont automatiquement sauvegardées.
+
+9. FICHIERS DU JEU
+────────────────────────────────────────────────────────────────────────────────
+• Niveaux par défaut       : niveaux/  
+• Niveaux personnalisés    : niveaux/personnalises/  
+• Progression & Sauvegardes: sauvegardes/progression.json  
+
+════════════════════════════════════════════════════════════════════════════════
