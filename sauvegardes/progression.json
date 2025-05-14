@@ -1,12 +1,6 @@
 {
     "joueur": {
-        "niveaux_completes": [
-            "map1",
-            "map4",
-            "map5",
-            "map2",
-            "map3"
-        ],
+        "niveaux_completes": [],
         "nom": "Joueur1"
     },
     "niveaux_completes": [
@@ -17,26 +11,5 @@
         "textures_active": true,
         "volume_son": 1.0
     },
-    "scores": {
-        "map1": {
-            "mouvements": 6,
-            "temps": 3.36
-        },
-        "map2": {
-            "mouvements": 87,
-            "temps": 26.82
-        },
-        "map3": {
-            "mouvements": 15,
-            "temps": 4.48
-        },
-        "map4": {
-            "mouvements": 31,
-            "temps": 9.04
-        },
-        "map5": {
-            "mouvements": 93,
-            "temps": 18.56
-        }
-    }
+    "scores": {}
 }

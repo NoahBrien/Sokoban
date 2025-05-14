@@ -13,28 +13,47 @@ class Solveur(ABC):
         pass
 
 class SolveurBFS(Solveur):
-    """Résout en utilisant Breadth-First Search (cherche le chemin le plus court)."""
-    def resoudre(self, niveau_ref_pour_simulation):
-        """Retourne le plus court chemin en mouvements ou None si échec."""
+    """Résout en utilisant Breadth‑First Search (cherche le chemin le plus court),
+    avec un plafond sur le nombre d’itérations."""
+
+    def __init__(self, niveau_initial_etat):
+        """Initialise le solveur BFS avec l’état de départ."""
+        super().__init__(niveau_initial_etat)
+
+    def resoudre(self, niveau_ref_pour_simulation, max_iterations=C.MAX_ITERATIONS_BFS):
+        """Retourne le plus court chemin (liste de symboles) ou None si échec,
+        ainsi que le nombre d’itérations effectuées.
+        S’arrête si le nombre d’itérations atteint max_iterations."""
         if self.niveau_initial_etat is None:
             return None, 0
+
         file_etats = collections.deque([(self.niveau_initial_etat, [])])
         visites = {self.niveau_initial_etat}
         iterations = 0
+
         while file_etats:
+            if iterations >= max_iterations:
+                return None, iterations
+
             iterations += 1
             etat, chemin = file_etats.popleft()
+
             niveau_ref_pour_simulation.appliquer_etat_solveur(etat)
             if niveau_ref_pour_simulation.verifier_victoire():
                 return chemin, iterations
-            for dx, dy, sym in [(0,-1,'H'),(0,1,'B'),(-1,0,'G'),(1,0,'D')]:
+
+            for dx, dy, sym in [(0, -1, 'H'), (0, 1, 'B'),
+                                 (-1, 0, 'G'), (1, 0, 'D')]:
                 niveau_ref_pour_simulation.appliquer_etat_solveur(etat)
-                if niveau_ref_pour_simulation.deplacer_joueur(dx, dy, C.TAILLE_CASE, simuler_seulement=True):
+                if niveau_ref_pour_simulation.deplacer_joueur(
+                        dx, dy, C.TAILLE_CASE, simuler_seulement=True):
                     nv = niveau_ref_pour_simulation.get_etat_pour_solveur()
                     if nv and nv not in visites:
                         visites.add(nv)
-                        file_etats.append((nv, chemin+[sym]))
+                        file_etats.append((nv, chemin + [sym]))
+
         return None, iterations
+
 
 class SolveurRetourArriere(Solveur):
     """Résout en DFS backtracking optimisé avec borne initiale BFS."""
